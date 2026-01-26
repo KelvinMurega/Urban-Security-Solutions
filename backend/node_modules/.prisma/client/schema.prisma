@@ -1,0 +1,106 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  GUARD
+  CLIENT
+  SUPERVISOR
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(GUARD)
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts    Shift[]
+  leaves    LeaveRequest[]
+  reports   ShiftReport[]
+}
+
+model Site {
+  id           String   @id @default(uuid())
+  name         String
+  address      String
+  contactPhone String?
+  latitude     Float?
+  longitude    Float?
+  
+  shifts       Shift[]
+}
+
+model Shift {
+  id        String      @id @default(uuid())
+  startTime DateTime
+  endTime   DateTime
+  status    ShiftStatus @default(SCHEDULED)
+  
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  
+  siteId    String
+  site      Site        @relation(fields: [siteId], references: [id])
+
+  attendance Attendance?
+  report     ShiftReport?
+}
+
+model Attendance {
+  id            String    @id @default(uuid())
+  checkIn       DateTime
+  checkOut      DateTime?
+  handoverNotes String?
+  
+  shiftId       String    @unique
+  shift         Shift     @relation(fields: [shiftId], references: [id])
+}
+
+model ShiftReport {
+  id        String   @id @default(uuid())
+  content   String
+  severity  String
+  createdAt DateTime @default(now())
+
+  shiftId   String   @unique
+  shift     Shift    @relation(fields: [shiftId], references: [id])
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model LeaveRequest {
+  id        String      @id @default(uuid())
+  startDate DateTime
+  endDate   DateTime
+  reason    String
+  status    LeaveStatus @default(PENDING)
+  
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+}
