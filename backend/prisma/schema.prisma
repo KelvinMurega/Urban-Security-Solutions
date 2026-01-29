@@ -9,25 +9,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  GUARD
-  CLIENT
-  SUPERVISOR
-}
-
-enum ShiftStatus {
-  SCHEDULED
-  COMPLETED
-  CANCELLED
-}
-
-enum LeaveStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
+// 1. User Model (Admin & Guards)
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -36,14 +18,24 @@ model User {
   role      Role     @default(GUARD)
   phone     String?
   address   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status    String   @default("ACTIVE") // ACTIVE, INACTIVE
+  
+  // Relations
+  siteId    String?
+  site      Site?    @relation(fields: [siteId], references: [id])
 
   shifts    Shift[]
-  leaves    LeaveRequest[]
+  incidents Incident[]
   reports   ShiftReport[]
+  
+  // Placeholder for future feature
+  leaves    LeaveRequest[] 
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
+// 2. Site Model (Locations)
 model Site {
   id           String   @id @default(uuid())
   name         String
@@ -52,55 +44,69 @@ model Site {
   latitude     Float?
   longitude    Float?
   
+  // Relations
+  users        User[]
   shifts       Shift[]
+  incidents    Incident[]
+  reports      ShiftReport[]
 }
 
+// 3. Shift Model (Schedule)
 model Shift {
-  id        String      @id @default(uuid())
+  id        String   @id @default(uuid())
   startTime DateTime
   endTime   DateTime
-  status    ShiftStatus @default(SCHEDULED)
-  
+  status    String   @default("SCHEDULED") // SCHEDULED, COMPLETED, MISSED
+
   userId    String
-  user      User        @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
   
   siteId    String
-  site      Site        @relation(fields: [siteId], references: [id])
-
-  attendance Attendance?
-  report     ShiftReport?
+  site      Site     @relation(fields: [siteId], references: [id])
 }
 
-model Attendance {
-  id            String    @id @default(uuid())
-  checkIn       DateTime
-  checkOut      DateTime?
-  handoverNotes String?
+// 4. Incident Model (Emergencies)
+model Incident {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  severity    String   @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
+  status      String   @default("OPEN") // OPEN, RESOLVED
   
-  shiftId       String    @unique
-  shift         Shift     @relation(fields: [shiftId], references: [id])
+  resolutionDetails String?  
+  resolvedAt        DateTime?
+  reportedAt  DateTime @default(now())
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  siteId      String
+  site        Site     @relation(fields: [siteId], references: [id])
 }
 
+// 5. ShiftReport Model (Daily Logs)
 model ShiftReport {
   id        String   @id @default(uuid())
   content   String
-  severity  String
   createdAt DateTime @default(now())
 
-  shiftId   String   @unique
-  shift     Shift    @relation(fields: [shiftId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
   
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id])
+}
+
+// Placeholder for Leave Requests (to prevent errors if you had this before)
+model LeaveRequest {
+  id        String   @id @default(uuid())
+  reason    String
+  status    String   @default("PENDING")
   userId    String
   user      User     @relation(fields: [userId], references: [id])
 }
 
-model LeaveRequest {
-  id        String      @id @default(uuid())
-  startDate DateTime
-  endDate   DateTime
-  reason    String
-  status    LeaveStatus @default(PENDING)
-  
-  userId    String
-  user      User        @relation(fields: [userId], references: [id])
+enum Role {
+  ADMIN
+  GUARD
 }
