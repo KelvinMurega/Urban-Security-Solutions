@@ -1,7 +1,7 @@
 // frontend/src/app/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { FormEvent, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 
@@ -12,44 +12,46 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', {
+      // Use environment variables for API URLs for better flexibility
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const res = await axios.post(`${apiUrl}/api/auth/login`, {
         email,
         password
       });
 
-      console.log("Login Response:", res.data); // Debugging log
+      const { token, user: userData } = res.data;
 
-      // 1. Save Token
-      if (res.data.token) {
-        localStorage.setItem('token', res.data.token);
-      } else {
-        throw new Error("No token received");
+      // The backend should always return a token and user object on success.
+      // Fail safely instead of making assumptions about user data.
+      if (!token || !userData?.role) {
+        setError('Login failed: No token received from server.');
+        return;
       }
 
-      // 2. Save User (Safely)
-      // We check if 'user' exists and is an object before stringifying
-      if (res.data.user && typeof res.data.user === 'object') {
-        localStorage.setItem('user', JSON.stringify(res.data.user));
-      } else {
-        // Fallback if backend sends weird structure
-        localStorage.setItem('user', JSON.stringify({ name: 'Admin', email: email }));
-      }
+      // 1. Save Token & User Data
+      // SECURITY NOTE: Storing tokens in localStorage is vulnerable to XSS attacks.
+      // For production apps, consider using httpOnly cookies set by the server.
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(userData));
 
-      // 3. Redirect
-      // Small delay to ensure storage is saved
-      setTimeout(() => {
+      console.log("Login Success. Role:", userData.role);
+
+      // 2. Redirect based on Role
+      // localStorage.setItem is synchronous, so no timeout is needed.
+      if (userData.role === 'GUARD') {
+        router.push('/guard/dashboard');
+      } else {
         router.push('/dashboard');
-      }, 100);
-
-    } catch (err: any) {
-      console.error("Login Error:", err);
-      setError('Invalid email or password. Please try again.');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Invalid email or password.');
     } finally {
       setLoading(false);
     }
@@ -61,7 +63,7 @@ export default function LoginPage() {
         
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-slate-900">URBAN SECURITY</h1>
-          <p className="text-gray-500 mt-2">Operations Command Login</p>
+          <p className="text-gray-500 mt-2">Personnel Login</p>
         </div>
 
         {error && (
@@ -72,20 +74,22 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
+            <label htmlFor="email" className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
             <input 
+              id="email"
               type="email" 
               required
               className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-900 outline-none transition"
-              placeholder="admin@urbansecurity.com"
+              placeholder="name@urbansecurity.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Password</label>
+            <label htmlFor="password" className="block text-sm font-bold text-gray-700 mb-2">Password</label>
             <input 
+              id="password"
               type="password" 
               required
               className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-900 outline-none transition"
@@ -105,7 +109,7 @@ export default function LoginPage() {
         </form>
         
         <p className="mt-6 text-center text-xs text-gray-400">
-          Restricted Access. Unauthorized attempts are logged.
+          Unauthorized access is prohibited.
         </p>
       </div>
     </div>
