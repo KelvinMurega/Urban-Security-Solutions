@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { ReportService } from './reports.service';
+import * as ReportService from './reports.service';
 
 export class ReportController {
 

@@ -1,11 +1,30 @@
 import { Request, Response } from 'express';
-import { SiteService } from './site.service';
+import * as SiteService from './site.service';
+import { z } from 'zod';
+
+const siteSchema = z.object({
+  name: z.string().min(2),
+  address: z.string().min(2),
+  location: z.string().optional(),
+  managerId: z.string().optional(),
+});
+
+const siteUpdateSchema = z.object({
+  name: z.string().min(2).optional(),
+  address: z.string().min(2).optional(),
+  location: z.string().optional(),
+  managerId: z.string().optional(),
+});
 
 export class SiteController {
 
   static async create(req: Request, res: Response) {
     try {
-      const site = await SiteService.createSite(req.body);
+      const parsed = siteSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues });
+      }
+      const site = await SiteService.createSite(parsed.data);
       res.status(201).json(site);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -45,8 +64,21 @@ export class SiteController {
   // Add inside SiteController class
   static async update(req: Request, res: Response) {
     try {
-      const site = await SiteService.updateSite(req.params.id as string, req.body);
+      const parsed = siteUpdateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues });
+      }
+      const site = await SiteService.updateSite(req.params.id as string, parsed.data);
       res.json(site);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async delete(req: Request, res: Response) {
+    try {
+      await SiteService.deleteSite(req.params.id as string);
+      res.status(204).send();
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

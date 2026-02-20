@@ -1,43 +1,42 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, IncidentSeverity } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export class IncidentService {
-  
-  // 1. Log a new Incident
-  static async createIncident(data: any) {
-    return await prisma.incident.create({
-      data: {
-        title: data.title,
-        description: data.description,
-        severity: data.severity,
-        userId: data.userId,
-        siteId: data.siteId,
-        status: 'OPEN'
-      }
-    });
-  }
+export const createIncident = async (data: any) => {
+  return await prisma.incident.create({
+    data: {
+      title: data.title,
+      description: data.description,
+      // Default to MEDIUM if invalid
+      severity: (data.severity as IncidentSeverity) || IncidentSeverity.MEDIUM,
+      user: { connect: { id: data.userId } },
+      site: { connect: { id: data.siteId } },
+    },
+  });
+};
 
-  // 2. Get All Incidents (Newest first)
-  static async getAllIncidents() {
-    return await prisma.incident.findMany({
-      include: {
-        user: { select: { name: true } }, // Who reported it?
-        site: { select: { name: true } }  // Where?
-      },
-      orderBy: { reportedAt: 'desc' }
-    });
-  }
+export const getAllIncidents = async () => {
+  return await prisma.incident.findMany({
+    include: {
+      user: { select: { name: true, role: true } },
+      site: { select: { name: true } },
+    },
+    orderBy: {
+      createdAt: 'desc', // Use the audit field
+    },
+  });
+};
 
-  // 3. Update Incident 
-  static async updateIncident(id: string, data: any) { 
-    return await prisma.incident.update({
-      where: { id },
-      data: {
-        status: data.status,
-        resolutionDetails: data.resolutionDetails, 
-        resolvedAt: data.status === 'RESOLVED' ? new Date() : null
-      }
-    }); 
-  }
+export const getIncidentById = async (id: string) => {
+  return await prisma.incident.findUnique({
+    where: { id },
+    include: {
+      user: true,
+      site: true,
+    },
+  });
+};
+
+export function updateIncident(arg0: string, body: any) {
+  throw new Error('Function not implemented.');
 }

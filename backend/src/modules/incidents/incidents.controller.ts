@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { IncidentService } from './incidents.service';
+import * as IncidentService from './incidents.service';
+
 
 export class IncidentController {
 
@@ -30,6 +31,19 @@ export class IncidentController {
       res.json(incident);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
+    }
+  }
+
+  // 4. Get Incident by ID
+  static async getById(req: Request, res: Response) {
+    try {
+      const incident = await IncidentService.getIncidentById(req.params.id as string);
+      if (!incident) {
+        return res.status(404).json({ error: 'Incident not found' });
+      }
+      res.json(incident);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   }
 }

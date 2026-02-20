@@ -51,8 +51,19 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
     e.preventDefault();
     setLoading(true);
     try {
-      // Send Update to Backend
-      await axios.put(`http://localhost:5000/api/users/guards/${id}`, formData);
+      // Only send fields expected by backend: siteId should be a string, not an object
+      // phone is included and will be saved in the database
+      const payload: any = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        status: formData.status,
+        siteId: formData.siteId || undefined,
+      };
+      // Only include role if admin is changing it (add logic if needed)
+      // if (formData.role) payload.role = formData.role;
+
+      await axios.put(`http://localhost:5000/api/users/guards/${id}`, payload);
       setIsEditing(false); // Turn off edit mode
       fetchData(); // Refresh data to show changes
     } catch (err) {
@@ -145,22 +156,26 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                   <input className="w-full border p-2 rounded text-black" 
-                    value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                    value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required 
+                    placeholder="Full Name" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                   <input className="w-full border p-2 rounded text-black bg-gray-100" 
-                    value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+                    value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required 
+                    placeholder="Email Address" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                   <input className="w-full border p-2 rounded text-black" 
-                    value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                    value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} 
+                    placeholder="Phone Number" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Employment Status</label>
                   <select className="w-full border p-2 rounded text-black"
-                    value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+                    value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}
+                    title="Employment Status">
                     <option value="ACTIVE">Active</option>
                     <option value="INACTIVE">Inactive / Suspended</option>
                   </select>
@@ -168,7 +183,8 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
                 <div className="md:col-span-2">
                    <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Site</label>
                    <select className="w-full border p-2 rounded text-black"
-                    value={formData.siteId} onChange={e => setFormData({...formData, siteId: e.target.value})}>
+                    value={formData.siteId} onChange={e => setFormData({...formData, siteId: e.target.value})}
+                    title="Assigned Site">
                     <option value="">-- Unassigned --</option>
                     {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                    </select>
@@ -183,11 +199,11 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
           {/* HISTORY: SHIFTS */}
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
             <h2 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">📅 Recent Shifts</h2>
-            {guard.shifts.length === 0 ? (
+            {(guard.shifts || []).length === 0 ? (
               <p className="text-gray-400 italic">No shift history available.</p>
             ) : (
               <div className="space-y-3">
-                {guard.shifts.map((shift: any) => (
+                {(guard.shifts || []).map((shift: any) => (
                   <div key={shift.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
                     <div>
                       <p className="font-bold text-gray-700">{shift.site.name}</p>
@@ -209,11 +225,11 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
           {/* HISTORY: INCIDENTS */}
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
             <h2 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">🚨 Reported Incidents</h2>
-            {guard.incidents.length === 0 ? (
+            {(guard.incidents || []).length === 0 ? (
               <p className="text-gray-400 italic">Clean record. No incidents reported.</p>
             ) : (
               <div className="space-y-3">
-                {guard.incidents.map((inc: any) => (
+                {(guard.incidents || []).map((inc: any) => (
                   <div key={inc.id} className="p-3 border-l-4 border-red-500 bg-red-50 rounded">
                     <div className="flex justify-between">
                       <h3 className="font-bold text-red-900">{inc.title}</h3>
@@ -230,11 +246,11 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
         {/* RECENT LOGS */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <h2 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">📋 Daily Log Entries</h2>
-          {guard.reports.length === 0 ? (
+          {(guard.reports || []).length === 0 ? (
             <p className="text-gray-400 italic">No logs submitted recently.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {guard.reports.map((rep: any) => (
+              {(guard.reports || []).map((rep: any) => (
                 <div key={rep.id} className="bg-slate-50 p-4 rounded text-sm text-slate-700">
                   <p className="mb-2 italic">"{rep.content}"</p>
                   <p className="text-xs text-slate-400 text-right">{new Date(rep.createdAt).toLocaleString()}</p>

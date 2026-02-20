@@ -1,5 +1,5 @@
 // backend/prisma/seed.ts
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client'; // <--- Import 'Role' here
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -8,22 +8,20 @@ async function main() {
   const email = 'admin@urbansecurity.com';
   const password = 'admin123';
   
-  // 1. Hash the password (Security requirement)
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // 2. Upsert (Create if not exists, Update if exists)
   const admin = await prisma.user.upsert({
     where: { email },
     update: {
-      password: hashedPassword, // Update password if user exists
-      role: 'ADMIN',
+      password: hashedPassword,
+      role: Role.ADMIN, // <--- Use the Enum (Type Safe)
       name: 'System Administrator'
     },
     create: {
       email,
       password: hashedPassword,
       name: 'System Administrator',
-      role: 'ADMIN'
+      role: Role.ADMIN // <--- Use the Enum (Type Safe)
     },
   });
 

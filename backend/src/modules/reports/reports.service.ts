@@ -2,27 +2,34 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export class ReportService {
-  
-  // 1. Create Report
-  static async createReport(data: any) {
-    return await prisma.shiftReport.create({
-      data: {
-        content: data.content,
-        userId: data.userId,
-        siteId: data.siteId
-      }
-    });
-  }
+export const createReport = async (data: any) => {
+  return await prisma.report.create({
+    data: {
+      content: data.content,
+      user: { connect: { id: data.userId } },
+      shift: { connect: { id: data.shiftId } },
+    },
+  });
+};
 
-  // 2. Get All Reports (Newest first)
-  static async getAllReports() {
-    return await prisma.shiftReport.findMany({
-      include: {
-        user: { select: { name: true } },
-        site: { select: { name: true } }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-  }
-}
+export const getReportsByShift = async (shiftId: string) => {
+  return await prisma.report.findMany({
+    where: { shiftId },
+    include: {
+      user: {
+        select: { name: true, role: true }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+};
+
+export const getAllReports = async () => {
+  return await prisma.report.findMany({
+    include: {
+      user: { select: { name: true } },
+      shift: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+};

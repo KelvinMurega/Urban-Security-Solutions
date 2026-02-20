@@ -57,7 +57,15 @@ export default function GuardsPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const payload = { ...form, siteId: form.siteId || undefined };
+      // Only send fields expected by backend
+      const payload: any = {
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        phone: form.phone,
+        siteId: form.siteId || undefined,
+        role: 'GUARD',
+      };
 
       if (editingId) {
         await axios.put(`http://localhost:5000/api/users/guards/${editingId}`, payload);

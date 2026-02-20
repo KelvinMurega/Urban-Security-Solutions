@@ -5,18 +5,36 @@ import { useEffect, useState, use } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '../../../components/AdminLayout';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+type Guard = {
+  id: string;
+  name: string;
+  email: string;
+  siteId?: string;
+  site?: { name: string };
+};
+
+type Site = {
+  id: string;
+  name: string;
+  address: string;
+  contactPhone?: string;
+  users: Guard[];
+};
 export default function SiteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id } = use(params);
 
   // Data State
-  const [site, setSite] = useState<any>(null);
-  const [allGuards, setAllGuards] = useState<any[]>([]); // To populate the dropdown
-  
+  const [site, setSite] = useState<Site | null>(null);
+  const [allGuards, setAllGuards] = useState<Guard[]>([]); // To populate the dropdown
+
   // Editing State
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', address: '', contactPhone: '' });
-  
+  const [editForm, setEditForm] = useState<{ name: string; address: string; contactPhone: string }>({ name: '', address: '', contactPhone: '' });
+
   // Assigning State
   const [selectedGuardId, setSelectedGuardId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,12 +47,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const fetchData = async () => {
     try {
       const [siteRes, guardsRes] = await Promise.all([
-        axios.get(`http://localhost:5000/api/sites/${id}`),
-        axios.get('http://localhost:5000/api/users/guards')
+        axios.get(`${API_URL}/api/sites/${id}`),
+        axios.get(`${API_URL}/api/users/guards`)
       ]);
       setSite(siteRes.data);
       setAllGuards(guardsRes.data);
-      
+
       // Pre-fill edit form
       setEditForm({
         name: siteRes.data.name,
@@ -50,7 +68,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const handleUpdateSite = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.put(`http://localhost:5000/api/sites/${id}`, editForm);
+      await axios.put(`${API_URL}/api/sites/${id}`, editForm);
       setIsEditing(false);
       fetchData(); // Refresh data
     } catch (err) {
@@ -66,10 +84,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     setLoading(true);
     try {
       // We update the guard's "siteId" to match THIS site
-      await axios.put(`http://localhost:5000/api/users/guards/${selectedGuardId}`, {
+      await axios.put(`${API_URL}/api/users/guards/${selectedGuardId}`, {
         siteId: id
       });
-      
+
       setSelectedGuardId('');
       fetchData(); // Refresh lists
     } catch (err) {
@@ -83,9 +101,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const handleRemoveGuard = async (guardId: string) => {
     if(!confirm("Remove this guard from the site?")) return;
     try {
-      // Set siteId to null (or empty string depending on backend logic)
-      await axios.put(`http://localhost:5000/api/users/guards/${guardId}`, {
-        siteId: null 
+      // Set siteId to undefined to unassign (backend expects undefined or omit)
+      await axios.put(`${API_URL}/api/users/guards/${guardId}`, {
+        siteId: undefined
       });
       fetchData();
     } catch (err) {
@@ -145,15 +163,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
           <div>
             <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
               👮 Assigned Personnel 
-              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">{site.users.length}</span>
+              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">{(site.users || []).length}</span>
             </h2>
             
             <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-              {site.users.length === 0 ? (
+              {(site.users || []).length === 0 ? (
                 <div className="p-8 text-center text-gray-400 italic">No guards currently assigned.</div>
               ) : (
                 <ul className="divide-y divide-gray-100">
-                  {site.users.map((guard: any) => (
+                  {(site.users || []).map((guard: any) => (
                     <li key={guard.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition">
                       <div className="flex items-center gap-3">
                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">

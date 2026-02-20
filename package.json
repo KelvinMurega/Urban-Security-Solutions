@@ -1,0 +1,13 @@
+{
+  "dependencies": {
+    "@prisma/client": "^5.15.0",
+    "client-only": "^0.0.1",
+    "has-flag": "^5.0.1",
+    "prisma": "^5.15.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.24",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18"
+  }
+}
