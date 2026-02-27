@@ -5,8 +5,10 @@ import { useEffect, useState, use } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '../../../components/AdminLayout';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+import { resolveApiUrl } from '../../../lib/api-url';
+import PageHeader from '../../../components/ui/PageHeader';
+import StatusBadge from '../../../components/ui/StatusBadge';
+import { useToast } from '../../../components/ui/ToastProvider';
 
 type Guard = {
   id: string;
@@ -26,6 +28,8 @@ type Site = {
 export default function SiteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id } = use(params);
+  const apiUrl = resolveApiUrl();
+  const { showToast } = useToast();
 
   // Data State
   const [site, setSite] = useState<Site | null>(null);
@@ -47,8 +51,8 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const fetchData = async () => {
     try {
       const [siteRes, guardsRes] = await Promise.all([
-        axios.get(`${API_URL}/api/sites/${id}`),
-        axios.get(`${API_URL}/api/users/guards`)
+        axios.get(`${apiUrl}/api/sites/${id}`),
+        axios.get(`${apiUrl}/api/users/guards`)
       ]);
       setSite(siteRes.data);
       setAllGuards(guardsRes.data);
@@ -61,6 +65,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
       });
     } catch (err) {
       console.error(err);
+      showToast('Failed to load site details.', 'error');
     }
   };
 
@@ -68,11 +73,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const handleUpdateSite = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.put(`${API_URL}/api/sites/${id}`, editForm);
+      await axios.put(`${apiUrl}/api/sites/${id}`, editForm);
       setIsEditing(false);
       fetchData(); // Refresh data
+      showToast('Site details updated.', 'success');
     } catch (err) {
-      alert('Failed to update site details.');
+      showToast('Failed to update site details.', 'error');
     }
   };
 
@@ -84,14 +90,15 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     setLoading(true);
     try {
       // We update the guard's "siteId" to match THIS site
-      await axios.put(`${API_URL}/api/users/guards/${selectedGuardId}`, {
+      await axios.put(`${apiUrl}/api/users/guards/${selectedGuardId}`, {
         siteId: id
       });
 
       setSelectedGuardId('');
       fetchData(); // Refresh lists
+      showToast('Guard assigned to site.', 'success');
     } catch (err) {
-      alert('Failed to assign guard.');
+      showToast('Failed to assign guard.', 'error');
     } finally {
       setLoading(false);
     }
@@ -102,12 +109,13 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     if(!confirm("Remove this guard from the site?")) return;
     try {
       // Set siteId to undefined to unassign (backend expects undefined or omit)
-      await axios.put(`${API_URL}/api/users/guards/${guardId}`, {
+      await axios.put(`${apiUrl}/api/users/guards/${guardId}`, {
         siteId: undefined
       });
       fetchData();
+      showToast('Guard unassigned from site.', 'success');
     } catch (err) {
-      alert('Failed to remove guard.');
+      showToast('Failed to remove guard.', 'error');
     }
   };
 
@@ -115,27 +123,37 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
 
   return (
     <AdminLayout>
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
+        <PageHeader
+          title={site.name}
+          subtitle="Edit site details, assign guards, and manage deployments."
+          right={
+            <button onClick={() => router.push('/sites')} className="w-full md:w-auto text-sm font-semibold text-blue-700 hover:text-blue-900">
+              &larr; Back to Sites
+            </button>
+          }
+        />
         
         {/* SECTION 1: SITE DETAILS HEADER (Editable) */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           {!isEditing ? (
-            <div className="flex justify-between items-start">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">{site.name}</h1>
                 <div className="mt-2 space-y-1 text-gray-600">
                   <p>📍 {site.address}</p>
                   <p>📞 {site.contactPhone || 'No phone listed'}</p>
                 </div>
+                <div className="mt-4">
+                  <StatusBadge label="Active Site" tone="success" />
+                </div>
               </div>
-              <div className="space-x-2">
+              <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
                  <button 
                   onClick={() => setIsEditing(true)}
-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded hover:bg-gray-200 transition font-medium"
+                  className="w-full sm:w-auto bg-gray-100 text-gray-700 px-4 py-2 rounded hover:bg-gray-200 transition font-medium"
                 >
                   ✎ Edit Details
                 </button>
-                 <button onClick={() => router.push('/sites')} className="text-gray-500 hover:text-black px-4">Back</button>
               </div>
             </div>
           ) : (
@@ -149,9 +167,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                 <input className="border p-2 rounded text-black" placeholder="Contact Phone" 
                   value={editForm.contactPhone} onChange={e => setEditForm({...editForm, contactPhone: e.target.value})} />
               </div>
-              <div className="flex gap-2">
-                <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save Changes</button>
-                <button type="button" onClick={() => setIsEditing(false)} className="bg-gray-300 text-gray-800 px-4 py-2 rounded">Cancel</button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button type="submit" className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save Changes</button>
+                <button type="button" onClick={() => setIsEditing(false)} className="w-full sm:w-auto bg-gray-300 text-gray-800 px-4 py-2 rounded">Cancel</button>
               </div>
             </form>
           )}
@@ -172,7 +190,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               ) : (
                 <ul className="divide-y divide-gray-100">
                   {(site.users || []).map((guard: any) => (
-                    <li key={guard.id} className="p-4 flex justify-between items-center hover:bg-gray-50 transition">
+                    <li key={guard.id} className="p-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 hover:bg-gray-50 transition">
                       <div className="flex items-center gap-3">
                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
                            {guard.name.charAt(0)}
@@ -184,7 +202,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                       </div>
                       <button 
                         onClick={() => handleRemoveGuard(guard.id)}
-                        className="text-red-400 hover:text-red-600 text-xs border border-red-200 px-2 py-1 rounded hover:bg-red-50"
+                        className="w-full sm:w-auto text-red-400 hover:text-red-600 text-xs border border-red-200 px-2 py-1 rounded hover:bg-red-50"
                       >
                         Unassign
                       </button>

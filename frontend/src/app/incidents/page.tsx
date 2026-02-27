@@ -4,8 +4,14 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import AdminLayout from '../../components/AdminLayout';
+import { resolveApiUrl } from '../../lib/api-url';
+import PageHeader from '../../components/ui/PageHeader';
+import StatusBadge from '../../components/ui/StatusBadge';
+import { useToast } from '../../components/ui/ToastProvider';
 
 export default function IncidentsPage() {
+  const apiUrl = resolveApiUrl();
+  const { showToast } = useToast();
   // Data State
   const [incidents, setIncidents] = useState<any[]>([]);
   const [guards, setGuards] = useState<any[]>([]);
@@ -36,15 +42,16 @@ export default function IncidentsPage() {
   const fetchData = async () => {
     try {
       const [incRes, guardRes, siteRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/incidents'),
-        axios.get('http://localhost:5000/api/users/guards'),
-        axios.get('http://localhost:5000/api/sites')
+        axios.get(`${apiUrl}/api/incidents`),
+        axios.get(`${apiUrl}/api/users/guards`),
+        axios.get(`${apiUrl}/api/sites`)
       ]);
       setIncidents(incRes.data);
       setGuards(guardRes.data);
       setSites(siteRes.data);
     } catch (err) {
       console.error(err);
+      showToast('Failed to load incidents data.', 'error');
     }
   };
 
@@ -54,30 +61,36 @@ export default function IncidentsPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post('http://localhost:5000/api/incidents', form);
+      await axios.post(`${apiUrl}/api/incidents`, form);
       setForm({ title: '', description: '', severity: 'LOW', userId: '', siteId: '' });
       setShowLogModal(false);
       fetchData();
+      showToast('Incident logged.', 'success');
     } catch (err) {
-      alert('Failed to log incident');
+      showToast('Failed to log incident.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const submitResolution = async () => {
-    if (!resolutionText.trim()) return alert("Please enter resolution details.");
+    if (!resolutionText.trim()) {
+      showToast('Please enter resolution details.', 'info');
+      return;
+    }
     setLoading(true);
     try {
-      await axios.put(`http://localhost:5000/api/incidents/${selectedIncident.id}`, {
+      await axios.put(`${apiUrl}/api/incidents/${selectedIncident.id}`, {
         status: 'RESOLVED',
         resolutionDetails: resolutionText
       });
       setShowResolveModal(false);
       setSelectedIncident(null);
+      setResolutionText('');
       fetchData();
+      showToast('Incident marked as resolved.', 'success');
     } catch (err) {
-      alert('Failed to resolve');
+      showToast('Failed to resolve incident.', 'error');
     } finally {
       setLoading(false);
     }
@@ -98,36 +111,37 @@ export default function IncidentsPage() {
       <div className="max-w-7xl mx-auto">
 
         {/* --- SCREEN HEADER (Hidden on Print) --- */}
-        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 no-print">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Incident Management</h1>
-            <p className="text-gray-500">Track, resolve, and report security breaches.</p>
-          </div>
+        <div className="no-print">
+          <PageHeader
+            title="Incident Management"
+            subtitle="Track, resolve, and report security breaches."
+            right={
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto">
+                <select
+                  className="sm:col-span-3 md:col-span-1 border p-2 rounded text-gray-700 bg-white shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  value={filterSiteId}
+                  onChange={(e) => setFilterSiteId(e.target.value)}
+                >
+                  <option value="ALL">Show All Sites</option>
+                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
 
-          <div className="flex gap-3 w-full md:w-auto">
-            <select
-              className="border p-2 rounded text-gray-700 bg-white shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
-              value={filterSiteId}
-              onChange={(e) => setFilterSiteId(e.target.value)}
-            >
-              <option value="ALL">Show All Sites</option>
-              {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+                <button
+                  onClick={() => setShowLogModal(true)}
+                  className="w-full bg-red-700 text-white px-4 py-2 rounded hover:bg-red-800 transition shadow font-bold"
+                >
+                  + Log Incident
+                </button>
 
-            <button
-              onClick={() => setShowLogModal(true)}
-              className="bg-red-700 text-white px-4 py-2 rounded hover:bg-red-800 transition shadow font-bold"
-            >
-              + Log Incident
-            </button>
-
-            <button
-              onClick={() => window.print()}
-              className="bg-gray-800 text-white px-4 py-2 rounded hover:bg-black transition shadow flex items-center gap-2"
-            >
-              🖨️ Print Report
-            </button>
-          </div>
+                <button
+                  onClick={() => window.print()}
+                  className="w-full bg-gray-800 text-white px-4 py-2 rounded hover:bg-black transition shadow flex items-center justify-center gap-2"
+                >
+                  🖨️ Print Report
+                </button>
+              </div>
+            }
+          />
         </div>
 
         {/* --- SCREEN CONTENT --- */}
@@ -138,14 +152,15 @@ export default function IncidentsPage() {
             </div>
           ) : (
             filteredIncidents.map((inc) => (
-              <div key={inc.id} className={`bg-white p-6 rounded-lg shadow-sm border-l-4 ${inc.status === 'RESOLVED' ? 'border-green-500' : 'border-red-500'}`}>
-                <div className="flex justify-between items-start">
+              <div key={inc.id} className={`bg-white p-4 md:p-6 rounded-lg shadow-sm border-l-4 ${inc.status === 'RESOLVED' ? 'border-green-500' : 'border-red-500'}`}>
+                <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${inc.severity === 'CRITICAL' ? 'bg-red-600 text-white' : 'bg-blue-100 text-blue-800'}`}>
-                        {inc.severity}
-                      </span>
-                      {inc.status === 'RESOLVED' && <span className="text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded">RESOLVED</span>}
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <StatusBadge
+                        label={inc.severity}
+                        tone={inc.severity === 'CRITICAL' ? 'danger' : inc.severity === 'HIGH' ? 'warning' : 'info'}
+                      />
+                      {inc.status === 'RESOLVED' && <StatusBadge label="RESOLVED" tone="success" />}
                       <span className="text-xs text-gray-400">{new Date(inc.reportedAt).toLocaleString()}</span>
                     </div>
                     <h3 className="text-lg font-bold text-gray-900">{inc.title}</h3>
@@ -158,7 +173,7 @@ export default function IncidentsPage() {
                       </div>
                     )}
 
-                    <div className="mt-3 text-xs text-gray-400 flex gap-4">
+                    <div className="mt-3 text-xs text-gray-400 flex flex-wrap gap-4">
                       <span>📍 {inc.site?.name}</span>
                       <span>👮 {inc.user?.name}</span>
                     </div>
@@ -167,7 +182,7 @@ export default function IncidentsPage() {
                   {inc.status !== 'RESOLVED' && (
                     <button
                       onClick={() => { setSelectedIncident(inc); setShowResolveModal(true); }}
-                      className="ml-4 text-sm bg-white border border-red-200 text-red-600 px-3 py-1 rounded hover:bg-red-50 font-medium"
+                      className="w-full md:w-auto text-sm bg-white border border-red-200 text-red-600 px-3 py-2 md:py-1 rounded hover:bg-red-50 font-medium"
                     >
                       Resolve
                     </button>
@@ -266,12 +281,12 @@ export default function IncidentsPage() {
         {/* --- MODALS --- */}
         {showLogModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print">
-            <div className="bg-white p-6 rounded-lg w-full max-w-md shadow-2xl">
+            <div className="bg-white p-5 md:p-6 rounded-lg w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
               <h2 className="text-xl font-bold mb-4">Log New Incident</h2>
               <form onSubmit={handleReport} className="space-y-4">
                 <input className="w-full border p-2 rounded" placeholder="Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
                 <textarea className="w-full border p-2 rounded h-24" placeholder="Description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} required />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <select className="border p-2 rounded" value={form.siteId} onChange={e => setForm({ ...form, siteId: e.target.value })} required>
                     <option value="">Select Site</option>
                     {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -287,7 +302,7 @@ export default function IncidentsPage() {
                   <option value="HIGH">High</option>
                   <option value="CRITICAL">Critical</option>
                 </select>
-                <div className="flex gap-2 pt-2">
+                <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <button type="button" onClick={() => setShowLogModal(false)} className="flex-1 bg-gray-200 py-2 rounded">Cancel</button>
                   <button type="submit" disabled={loading} className="flex-1 bg-red-700 text-white py-2 rounded">{loading ? 'Saving...' : 'Log Incident'}</button>
                 </div>
@@ -298,7 +313,7 @@ export default function IncidentsPage() {
 
         {showResolveModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print">
-            <div className="bg-white p-6 rounded-lg w-full max-w-md shadow-2xl">
+            <div className="bg-white p-5 md:p-6 rounded-lg w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
               <h2 className="text-xl font-bold mb-2">Resolve Incident</h2>
               <p className="text-sm text-gray-500 mb-4">Describe the actions taken to close this case.</p>
               <textarea
@@ -308,7 +323,7 @@ export default function IncidentsPage() {
                 onChange={e => setResolutionText(e.target.value)}
                 autoFocus
               />
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button onClick={() => setShowResolveModal(false)} className="flex-1 bg-gray-200 py-2 rounded">Cancel</button>
                 <button onClick={submitResolution} disabled={loading} className="flex-1 bg-green-600 text-white py-2 rounded">{loading ? 'Saving...' : 'Confirm Resolution'}</button>
               </div>

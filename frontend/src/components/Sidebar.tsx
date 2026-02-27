@@ -4,10 +4,12 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import axios from 'axios';
+import { resolveApiUrl } from '../lib/api-url';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const apiUrl = resolveApiUrl();
 
   const menuItems = [
     { name: 'Command Center', path: '/dashboard', icon: '📡' },
@@ -21,7 +23,7 @@ export default function Sidebar() {
   const handleLogout = async () => {
     try {
       // Call backend to clear cookie
-      await axios.post('http://localhost:5000/api/auth/logout');
+      await axios.post(`${apiUrl}/api/auth/logout`);
       // Redirect to Login
       router.push('/');
     } catch (error) {

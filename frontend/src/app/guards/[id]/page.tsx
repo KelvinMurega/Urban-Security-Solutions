@@ -5,13 +5,20 @@ import { useEffect, useState, use } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '../../../components/AdminLayout';
+import { resolveApiUrl } from '../../../lib/api-url';
+import PageHeader from '../../../components/ui/PageHeader';
+import StatusBadge, { Tone } from '../../../components/ui/StatusBadge';
+import { useToast } from '../../../components/ui/ToastProvider';
 
 export default function GuardProfile({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id } = use(params);
+  const apiUrl = resolveApiUrl();
+  const { showToast } = useToast();
 
   // Data State
   const [guard, setGuard] = useState<any>(null);
+  const [guardShifts, setGuardShifts] = useState<any[]>([]);
   const [sites, setSites] = useState<any[]>([]); // Need sites for the dropdown
   
   // Edit Mode State
@@ -27,11 +34,14 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
   const fetchData = async () => {
     try {
       const [guardRes, sitesRes] = await Promise.all([
-        axios.get(`http://localhost:5000/api/users/guards/${id}`),
-        axios.get('http://localhost:5000/api/sites')
+        axios.get(`${apiUrl}/api/users/guards/${id}`),
+        axios.get(`${apiUrl}/api/sites`)
       ]);
+      const shiftsRes = await axios.get(`${apiUrl}/api/shifts`);
+
       setGuard(guardRes.data);
       setSites(sitesRes.data);
+      setGuardShifts((shiftsRes.data || []).filter((shift: any) => shift.userId === id));
 
       // Prepare Form Data in case they want to edit
       setFormData({
@@ -63,68 +73,68 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
       // Only include role if admin is changing it (add logic if needed)
       // if (formData.role) payload.role = formData.role;
 
-      await axios.put(`http://localhost:5000/api/users/guards/${id}`, payload);
+      await axios.put(`${apiUrl}/api/users/guards/${id}`, payload);
       setIsEditing(false); // Turn off edit mode
       fetchData(); // Refresh data to show changes
+      showToast('Guard profile updated.', 'success');
     } catch (err) {
-      alert('Failed to update profile.');
+      showToast('Failed to update profile.', 'error');
     } finally {
       setLoading(false);
     }
+  };
+
+  const getStatusTone = (status: string): Tone => {
+    if (status === 'ACTIVE') return 'success';
+    if (status === 'INACTIVE') return 'danger';
+    if (status === 'COMPLETED') return 'neutral';
+    return 'info';
   };
 
   if (!guard) return <AdminLayout><div className="p-8">Loading Profile...</div></AdminLayout>;
 
   return (
     <AdminLayout>
-      <div className="max-w-6xl mx-auto space-y-8">
-        
-        {/* Navigation Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-          <button onClick={() => router.push('/guards')} className="hover:text-blue-600 hover:underline">
-            &larr; Back to Personnel List
-          </button>
-          <span>/</span>
-          <span className="text-gray-900 font-semibold">{guard.name}</span>
-        </div>
+      <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
+        <PageHeader
+          title={guard.name}
+          subtitle="Guard profile and activity timeline."
+          right={
+            <button onClick={() => router.push('/guards')} className="w-full md:w-auto text-sm font-semibold text-blue-700 hover:text-blue-900">
+              &larr; Back to Personnel List
+            </button>
+          }
+        />
         
         {/* HEADER CARD (Editable) */}
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200">
+        <div className="bg-white p-4 md:p-8 rounded-xl shadow-sm border border-gray-200">
           
           {!isEditing ? (
             // --- VIEW MODE ---
-            <div className="flex justify-between items-start">
-              <div className="flex gap-6">
-                <div className="w-24 h-24 bg-slate-200 rounded-full flex items-center justify-center text-4xl text-slate-500 font-bold border-4 border-white shadow-sm">
+            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+                <div className="w-20 h-20 md:w-24 md:h-24 bg-slate-200 rounded-full flex items-center justify-center text-3xl md:text-4xl text-slate-500 font-bold border-4 border-white shadow-sm">
                   {guard.name.charAt(0)}
                 </div>
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900">{guard.name}</h1>
+                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{guard.name}</h1>
                   <div className="text-gray-500 mt-2 space-y-1">
                     <p className="flex items-center gap-2">📧 {guard.email}</p>
                     <p className="flex items-center gap-2">📞 {guard.phone || 'No phone number'}</p>
                   </div>
-                  <div className="mt-4 flex gap-3 items-center">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      guard.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {guard.status}
-                    </span>
+                  <div className="mt-4 flex flex-wrap gap-3 items-center">
+                    <StatusBadge label={guard.status} tone={getStatusTone(guard.status)} />
                     {guard.site ? (
-                       <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                        📍 Deployed at: {guard.site.name}
-                      </span>
+                      <StatusBadge label={`Deployed: ${guard.site.name}`} tone="info" />
                     ) : (
-                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-500 border border-gray-200">
-                        Unassigned
-                      </span>
+                      <StatusBadge label="Unassigned" tone="neutral" />
                     )}
                   </div>
                 </div>
               </div>
               <button 
                 onClick={() => setIsEditing(true)} 
-                className="bg-blue-900 text-white px-4 py-2 rounded hover:bg-blue-800 transition shadow flex items-center gap-2"
+                className="w-full lg:w-auto bg-blue-900 text-white px-4 py-2 rounded hover:bg-blue-800 transition shadow flex items-center justify-center gap-2"
               >
                 ✎ Edit Profile
               </button>
@@ -132,20 +142,20 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
           ) : (
             // --- EDIT MODE ---
             <form onSubmit={handleUpdate} className="space-y-4">
-              <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4 border-b pb-2">
                 <h2 className="text-xl font-bold text-blue-900">Editing Profile</h2>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
                    <button 
                     type="button" 
                     onClick={() => { setIsEditing(false); fetchData(); }} // Cancel reverts changes
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                    className="w-full md:w-auto px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
                   >
                     Cancel
                   </button>
                   <button 
                     type="submit" 
                     disabled={loading}
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold shadow"
+                    className="w-full md:w-auto px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold shadow"
                   >
                     {loading ? 'Saving...' : 'Save Changes'}
                   </button>
@@ -199,22 +209,31 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
           {/* HISTORY: SHIFTS */}
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
             <h2 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">📅 Recent Shifts</h2>
-            {(guard.shifts || []).length === 0 ? (
+            {(guardShifts || []).length === 0 ? (
               <p className="text-gray-400 italic">No shift history available.</p>
             ) : (
               <div className="space-y-3">
-                {(guard.shifts || []).map((shift: any) => (
-                  <div key={shift.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                {(guardShifts || []).map((shift: any) => (
+                  <div key={shift.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 p-3 bg-gray-50 rounded">
                     <div>
-                      <p className="font-bold text-gray-700">{shift.site.name}</p>
+                      <p className="font-bold text-gray-700">{shift.site?.name || 'Unknown Site'}</p>
                       <p className="text-xs text-gray-500">{new Date(shift.startTime).toLocaleDateString()}</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Check in: {shift.checkedInAt ? new Date(shift.checkedInAt).toLocaleString() : 'Not checked in'}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        Check out: {shift.checkedOutAt ? new Date(shift.checkedOutAt).toLocaleString() : 'Not checked out'}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-medium">
                         {new Date(shift.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - 
-                        {new Date(shift.endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                        {shift.endTime ? new Date(shift.endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : 'TBD'}
                       </p>
-                      <span className="text-xs text-green-600 font-bold">{shift.status}</span>
+                      <p className="text-xs text-gray-500">
+                        Worked: {typeof shift.workedHours === 'number' ? `${shift.workedHours.toFixed(2)}h` : '0.00h'}
+                      </p>
+                      <StatusBadge label={shift.status} tone={getStatusTone(shift.status)} />
                     </div>
                   </div>
                 ))}

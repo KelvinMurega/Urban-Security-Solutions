@@ -13,12 +13,22 @@ enum Role {
   GUARD
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum IncidentSeverity {
   
   LOW
   MEDIUM
   HIGH
   CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  RESOLVED
 }
 
 enum ShiftStatus {
@@ -36,6 +46,7 @@ model User {
   name      String
   phone     String?
   role      Role     @default(GUARD) // Uses the Enum instead of String
+  status    UserStatus @default(ACTIVE)
 
   // Relations
   managedSites Site[]    @relation("SiteManager")
@@ -76,6 +87,9 @@ model Incident {
   title       String
   description String
   severity    IncidentSeverity @default(MEDIUM)
+  status      IncidentStatus @default(OPEN)
+  resolutionDetails String?
+  reportedAt DateTime @default(now())
   
   // Relations
   userId      String
@@ -93,6 +107,10 @@ model Shift {
   startTime   DateTime
   endTime     DateTime?
   status      ShiftStatus @default(SCHEDULED)
+  checkedInAt DateTime?
+  checkedOutAt DateTime?
+  checkInFromGuardName String?
+  checkOutToGuardName String?
   
   // Relations
   userId      String

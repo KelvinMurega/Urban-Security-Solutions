@@ -9,6 +9,7 @@ export const createIncident = async (data: any) => {
       description: data.description,
       // Default to MEDIUM if invalid
       severity: (data.severity as IncidentSeverity) || IncidentSeverity.MEDIUM,
+      status: 'OPEN',
       user: { connect: { id: data.userId } },
       site: { connect: { id: data.siteId } },
     },
@@ -37,6 +38,12 @@ export const getIncidentById = async (id: string) => {
   });
 };
 
-export function updateIncident(arg0: string, body: any) {
-  throw new Error('Function not implemented.');
-}
+export const updateIncident = async (id: string, data: any) => {
+  return await prisma.incident.update({
+    where: { id },
+    data: {
+      status: data.status,
+      resolutionDetails: data.resolutionDetails,
+    },
+  });
+};

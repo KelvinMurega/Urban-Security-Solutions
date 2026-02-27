@@ -22,12 +22,17 @@ export default function GuardLayout({ children }: { children: React.ReactNode })
     }
 
     const user = JSON.parse(userStr);
+
+    if (user.role && user.role !== 'GUARD') {
+      router.push('/dashboard');
+      return;
+    }
     
     // 2. Role Check (Kick out Admins who stumble here?)
     // Optional: You might want Admins to be able to see this too for testing.
     // For now, we just ensure they are logged in.
     
-    setUserName(user.name);
+    setUserName(user.name || 'Guard');
     setIsAuthorized(true);
   }, [router]);
 
@@ -37,7 +42,7 @@ export default function GuardLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-gray-50 font-sans pb-20"> {/* Padding bottom for nav bar */}
       
       {/* Mobile Header */}
-      <header className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-10">
+      <header className="bg-slate-900 text-white p-3 sm:p-4 flex justify-between items-center shadow-md sticky top-0 z-10">
         <div>
           <h1 className="text-lg font-bold tracking-wider">URBAN SEC</h1>
           <p className="text-xs text-slate-400">Officer {userName.split(' ')[0]}</p>
@@ -46,7 +51,7 @@ export default function GuardLayout({ children }: { children: React.ReactNode })
       </header>
 
       {/* Main Content Area */}
-      <main className="p-4">
+      <main className="p-3 sm:p-4">
         {children}
       </main>
 
@@ -74,8 +79,8 @@ export default function GuardLayout({ children }: { children: React.ReactNode })
 // Helper Component for Nav Items
 function NavItem({ href, active, icon, label }: any) {
   return (
-    <Link href={href} className={`flex flex-col items-center justify-center w-16 py-1 ${active ? 'text-indigo-600' : 'text-gray-400'}`}>
-      <span className="text-xl mb-1">{icon}</span>
+    <Link href={href} className={`flex flex-col items-center justify-center w-12 sm:w-16 py-1 ${active ? 'text-indigo-600' : 'text-gray-400'}`}>
+      <span className="text-lg sm:text-xl mb-1">{icon}</span>
       <span className="text-[10px] font-medium">{label}</span>
     </Link>
   );

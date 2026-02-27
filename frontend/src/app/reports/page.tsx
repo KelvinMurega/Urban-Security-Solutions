@@ -3,19 +3,23 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useRouter } from 'next/navigation';
 import AdminLayout from '../../components/AdminLayout'; 
+import { resolveApiUrl } from '../../lib/api-url';
+import PageHeader from '../../components/ui/PageHeader';
+import StatusBadge from '../../components/ui/StatusBadge';
+import { useToast } from '../../components/ui/ToastProvider';
 
 export default function ReportsPage() {
-  const router = useRouter();
+  const apiUrl = resolveApiUrl();
+  const { showToast } = useToast();
   
   // Data State
   const [reports, setReports] = useState<any[]>([]);
   const [guards, setGuards] = useState<any[]>([]);
-  const [sites, setSites] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
   
   // Form State
-  const [form, setForm] = useState({ content: '', userId: '', siteId: '' });
+  const [form, setForm] = useState({ content: '', userId: '', shiftId: '' });
   const [loading, setLoading] = useState(false);
 
   // 1. Fetch Data
@@ -25,36 +29,38 @@ export default function ReportsPage() {
 
   const fetchData = async () => {
     try {
-      const [repRes, guardRes, siteRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/reports'),
-        axios.get('http://localhost:5000/api/users/guards'),
-        axios.get('http://localhost:5000/api/sites')
+      const [repRes, guardRes, shiftRes] = await Promise.all([
+        axios.get(`${apiUrl}/api/reports`),
+        axios.get(`${apiUrl}/api/users/guards`),
+        axios.get(`${apiUrl}/api/shifts`)
       ]);
       setReports(repRes.data);
       setGuards(guardRes.data);
-      setSites(siteRes.data);
+      setShifts(shiftRes.data);
     } catch (err) {
       console.error('Error fetching data:', err);
+      showToast('Failed to load reports data.', 'error');
     }
   };
 
   // 2. Submit Log
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.userId || !form.siteId) {
-      alert("Please select both a Site and a Guard.");
+    if (!form.userId || !form.shiftId) {
+      showToast('Please select a shift before submitting.', 'info');
       return;
     }
 
     setLoading(true);
     try {
-      await axios.post('http://localhost:5000/api/reports', form);
+      await axios.post(`${apiUrl}/api/reports`, form);
       
       // Reset form and refresh list
-      setForm({ content: '', userId: '', siteId: '' });
+      setForm({ content: '', userId: '', shiftId: '' });
       fetchData();
+      showToast('Report submitted.', 'success');
     } catch (err) {
-      alert('Error submitting report. Please try again.');
+      showToast('Error submitting report. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -64,11 +70,10 @@ export default function ReportsPage() {
     <AdminLayout>
       <div className="max-w-6xl mx-auto">
         
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">📋 Daily Shift Logs</h1>
-          <p className="text-gray-500">Review and submit daily activity reports.</p>
-        </div>
+        <PageHeader
+          title="Daily Shift Logs"
+          subtitle="Review and submit daily activity reports."
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           
@@ -89,32 +94,35 @@ export default function ReportsPage() {
                 />
               </div>
               
-              {/* Select Site */}
+              {/* Select Shift */}
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Site Location</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Shift</label>
                 <select 
                   className="w-full border p-2 rounded text-black" 
                   required
-                  value={form.siteId} 
-                  onChange={e => setForm({...form, siteId: e.target.value})}
+                  value={form.shiftId} 
+                  onChange={e => {
+                    const shiftId = e.target.value;
+                    const selectedShift = shifts.find((s) => s.id === shiftId);
+                    setForm({
+                      ...form,
+                      shiftId,
+                      userId: selectedShift?.userId || ''
+                    });
+                  }}
                 >
-                  <option value="">-- Select Site --</option>
-                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  <option value="">-- Select Shift --</option>
+                  {shifts.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {(s.site?.name || 'Unknown Site')} - {(s.user?.name || 'Unknown Guard')} - {new Date(s.startTime).toLocaleString()}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Select Guard */}
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Reporting Officer</label>
-                <select 
-                  className="w-full border p-2 rounded text-black" 
-                  required
-                  value={form.userId} 
-                  onChange={e => setForm({...form, userId: e.target.value})}
-                >
-                  <option value="">-- Select Guard --</option>
-                  {guards.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
+              <div className="text-xs text-gray-500 flex items-center gap-2">
+                <span>Reporting Officer:</span>
+                <StatusBadge label={guards.find((g) => g.id === form.userId)?.name || 'Select shift first'} tone="info" />
               </div>
 
               <button 
@@ -138,17 +146,17 @@ export default function ReportsPage() {
             ) : (
               reports.map((report) => (
                 <div key={report.id} className="bg-white p-5 rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-bold text-blue-900 bg-blue-50 px-2 py-1 rounded text-sm">
                         {report.user?.name || 'Unknown Guard'}
                       </span>
                       <span className="text-gray-400 text-sm">reported at</span>
                       <span className="font-semibold text-gray-700">
-                        {report.site?.name || 'Unknown Site'}
+                        {report.shift?.site?.name || 'Unknown Site'}
                       </span>
                     </div>
-                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded self-start sm:self-auto">
                       {new Date(report.createdAt).toLocaleString()}
                     </span>
                   </div>

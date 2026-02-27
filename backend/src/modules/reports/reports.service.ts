@@ -28,7 +28,11 @@ export const getAllReports = async () => {
   return await prisma.report.findMany({
     include: {
       user: { select: { name: true } },
-      shift: true,
+      shift: {
+        include: {
+          site: { select: { name: true } }
+        }
+      },
     },
     orderBy: { createdAt: 'desc' },
   });

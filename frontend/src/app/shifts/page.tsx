@@ -3,11 +3,15 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useRouter } from 'next/navigation';
 import AdminLayout from '../../components/AdminLayout';
+import { resolveApiUrl } from '../../lib/api-url';
+import PageHeader from '../../components/ui/PageHeader';
+import StatusBadge, { Tone } from '../../components/ui/StatusBadge';
+import { useToast } from '../../components/ui/ToastProvider';
 
 export default function ShiftsPage() {
-  const router = useRouter();
+  const apiUrl = resolveApiUrl();
+  const { showToast } = useToast();
   
   // Data State
   const [shifts, setShifts] = useState<any[]>([]);
@@ -32,9 +36,9 @@ export default function ShiftsPage() {
   const fetchData = async () => {
     try {
       const [shiftRes, guardRes, siteRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/shifts'),
-        axios.get('http://localhost:5000/api/users/guards'),
-        axios.get('http://localhost:5000/api/sites')
+        axios.get(`${apiUrl}/api/shifts`),
+        axios.get(`${apiUrl}/api/users/guards`),
+        axios.get(`${apiUrl}/api/sites`)
       ]);
       setShifts(shiftRes.data);
       setGuards(guardRes.data);
@@ -50,12 +54,13 @@ export default function ShiftsPage() {
     
     // Basic validation
     if (new Date(form.endTime) <= new Date(form.startTime)) {
-      return alert("End time must be after Start time.");
+      showToast('End time must be after Start time.', 'error');
+      return;
     }
 
     setLoading(true);
     try {
-      await axios.post('http://localhost:5000/api/shifts', {
+      await axios.post(`${apiUrl}/api/shifts`, {
         userId: form.userId,
         siteId: form.siteId,
         startTime: new Date(form.startTime).toISOString(),
@@ -65,8 +70,9 @@ export default function ShiftsPage() {
       setShowModal(false);
       setForm({ userId: '', siteId: '', startTime: '', endTime: '' });
       fetchData(); // Refresh list
+      showToast('Shift assigned successfully.', 'success');
     } catch (err) {
-      alert('Failed to create shift. Check overlapping times.');
+      showToast('Failed to create shift. Check overlapping times.', 'error');
     } finally {
       setLoading(false);
     }
@@ -79,34 +85,33 @@ export default function ShiftsPage() {
   };
 
   // Helper: Get Shift Status Color
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): Tone => {
     switch (status) {
-      case 'COMPLETED': return 'bg-gray-100 text-gray-500';
-      case 'IN_PROGRESS': return 'bg-green-100 text-green-700 border-green-200';
-      default: return 'bg-blue-50 text-blue-700 border-blue-200'; // UPCOMING
+      case 'COMPLETED': return 'neutral';
+      case 'ACTIVE': return 'success';
+      case 'CANCELLED': return 'danger';
+      default: return 'info';
     }
   };
 
   return (
     <AdminLayout>
       <div className="max-w-6xl mx-auto relative">
-        
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">📅 Shift Schedule</h1>
-            <p className="text-gray-500">Manage guard assignments and rosters.</p>
-          </div>
-          <button 
-            onClick={() => setShowModal(true)}
-            className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition shadow flex items-center gap-2"
-          >
-            <span>+</span> Assign Shift
-          </button>
-        </div>
+        <PageHeader
+          title="Shift Schedule"
+          subtitle="Manage guard assignments and attendance."
+          right={(
+            <button 
+              onClick={() => setShowModal(true)}
+              className="w-full md:w-auto bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition shadow flex items-center justify-center gap-2"
+            >
+              <span>+</span> Assign Shift
+            </button>
+          )}
+        />
 
         {/* Shift List */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden overflow-x-auto">
           {shifts.length === 0 ? (
             <div className="p-12 text-center text-gray-400">
               No shifts scheduled. Click "Assign Shift" to create the roster.
@@ -118,6 +123,9 @@ export default function ShiftsPage() {
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Officer</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Location</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Time Schedule</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Check In</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Check Out</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Hours Worked</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
                 </tr>
               </thead>
@@ -139,10 +147,35 @@ export default function ShiftsPage() {
                         to {formatDate(shift.endTime)}
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-sm text-gray-700">
+                      {shift.checkedInAt ? (
+                        <div>
+                          <p>{formatDate(shift.checkedInAt)}</p>
+                          {shift.checkInFromGuardName && (
+                            <p className="text-xs text-gray-500">From: {shift.checkInFromGuardName}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">Not checked in</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-700">
+                      {shift.checkedOutAt ? (
+                        <div>
+                          <p>{formatDate(shift.checkedOutAt)}</p>
+                          {shift.checkOutToGuardName && (
+                            <p className="text-xs text-gray-500">To: {shift.checkOutToGuardName}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">Not checked out</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-700 font-semibold">
+                      {typeof shift.workedHours === 'number' ? `${shift.workedHours.toFixed(2)}h` : '0.00h'}
+                    </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold border ${getStatusColor(shift.status)}`}>
-                        {shift.status}
-                      </span>
+                      <StatusBadge label={shift.status} tone={getStatusColor(shift.status)} />
                     </td>
                   </tr>
                 ))}
@@ -154,7 +187,7 @@ export default function ShiftsPage() {
         {/* --- CREATE SHIFT MODAL --- */}
         {showModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-            <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-lg">
+            <div className="bg-white p-5 md:p-6 rounded-lg shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
               <h2 className="text-xl font-bold text-gray-900 mb-6 border-b pb-2">Assign New Shift</h2>
               
               <form onSubmit={handleCreate} className="space-y-4">
@@ -192,7 +225,7 @@ export default function ShiftsPage() {
                 </div>
 
                 {/* 3. Time Range */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Start Time</label>
                     <input 
@@ -216,7 +249,7 @@ export default function ShiftsPage() {
                 </div>
 
                 {/* Buttons */}
-                <div className="flex gap-3 mt-6 pt-4">
+                <div className="flex flex-col sm:flex-row gap-3 mt-6 pt-4">
                   <button 
                     type="button"
                     onClick={() => setShowModal(false)}

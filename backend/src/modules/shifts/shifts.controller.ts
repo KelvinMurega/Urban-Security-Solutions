@@ -20,4 +20,42 @@ export class ShiftController {
       res.status(500).json({ error: error.message });
     }
   }
+
+  static async checkIn(req: Request, res: Response) {
+    try {
+      const { previousGuardName } = req.body;
+      const guardId = (req as any).user?.id;
+      if (!guardId || !previousGuardName) {
+        return res.status(400).json({ error: 'previousGuardName is required.' });
+      }
+
+      const shift = await ShiftService.checkInShift(
+        req.params.id as string,
+        String(guardId),
+        String(previousGuardName).trim()
+      );
+      res.json(shift);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  static async checkOut(req: Request, res: Response) {
+    try {
+      const { nextGuardName } = req.body;
+      const guardId = (req as any).user?.id;
+      if (!guardId || !nextGuardName) {
+        return res.status(400).json({ error: 'nextGuardName is required.' });
+      }
+
+      const shift = await ShiftService.checkOutShift(
+        req.params.id as string,
+        String(guardId),
+        String(nextGuardName).trim()
+      );
+      res.json(shift);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
 }

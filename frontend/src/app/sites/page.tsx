@@ -5,9 +5,15 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '../../components/AdminLayout';
+import { resolveApiUrl } from '../../lib/api-url';
+import PageHeader from '../../components/ui/PageHeader';
+import StatusBadge from '../../components/ui/StatusBadge';
+import { useToast } from '../../components/ui/ToastProvider';
 
 export default function SitesPage() {
   const router = useRouter();
+  const apiUrl = resolveApiUrl();
+  const { showToast } = useToast();
   const [sites, setSites] = useState<any[]>([]);
   
   // MODAL STATE
@@ -18,10 +24,11 @@ export default function SitesPage() {
   // 1. Fetch Sites
   const fetchSites = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/sites');
+      const res = await axios.get(`${apiUrl}/api/sites`);
       setSites(res.data);
     } catch (err) {
       console.error(err);
+      showToast('Failed to load sites.', 'error');
     }
   };
 
@@ -34,14 +41,15 @@ export default function SitesPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post('http://localhost:5000/api/sites', newSite);
+      await axios.post(`${apiUrl}/api/sites`, newSite);
       
       // Success: Close modal, reset form, refresh list
       setShowCreateModal(false);
       setNewSite({ name: '', address: '', contactPhone: '' });
       fetchSites();
+      showToast('Site created successfully.', 'success');
     } catch (err) {
-      alert('Failed to create site. Name might be taken.');
+      showToast('Failed to create site. Name may already exist.', 'error');
     } finally {
       setLoading(false);
     }
@@ -51,21 +59,25 @@ export default function SitesPage() {
     <AdminLayout>
       <div className="max-w-6xl mx-auto relative">
         
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Site Management</h1>
-            <p className="text-gray-500">Select a site to view details or assign guards.</p>
-          </div>
-          <button 
-            onClick={() => setShowCreateModal(true)} // <--- OPENS MODAL
-            className="bg-blue-900 text-white px-4 py-2 rounded hover:bg-blue-800 transition shadow-lg flex items-center gap-2"
-          >
-            <span>+</span> Add New Site
-          </button>
-        </div>
+        <PageHeader
+          title="Site Management"
+          subtitle="Select a site to view details or assign guards."
+          right={
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="w-full sm:w-auto bg-blue-900 text-white px-4 py-2 rounded hover:bg-blue-800 transition shadow-lg flex items-center justify-center gap-2"
+            >
+              <span>+</span> Add New Site
+            </button>
+          }
+        />
 
         {/* Sites Grid */}
+        {sites.length === 0 ? (
+          <div className="text-center p-12 bg-gray-50 rounded-lg text-gray-400 border border-dashed border-gray-300">
+            No sites found. Add your first site to start assigning guards.
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sites.map((site) => (
             <div 
@@ -73,7 +85,7 @@ export default function SitesPage() {
               onClick={() => router.push(`/sites/${site.id}`)}
               className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition group"
             >
-              <div className="flex justify-between items-start">
+              <div className="flex justify-between items-start gap-3">
                 <h3 className="text-xl font-bold text-gray-800 group-hover:text-blue-700 transition">
                   {site.name}
                 </h3>
@@ -90,20 +102,19 @@ export default function SitesPage() {
               </div>
 
               <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between items-center">
-                <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-1 rounded">
-                  Active
-                </span>
+                <StatusBadge label="Active" tone="success" />
                 <span className="text-blue-600 text-sm font-medium">Manage &rarr;</span>
               </div>
             </div>
           ))}
         </div>
+        )}
 
         {/* --- CREATE SITE MODAL --- */}
         {showCreateModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-            <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md transform transition-all scale-100">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Register New Location</h2>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+            <div className="bg-white p-5 md:p-8 rounded-lg shadow-2xl w-full max-w-md transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
+              <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-6">Register New Location</h2>
               
               <form onSubmit={handleCreate} className="space-y-4">
                 <div>

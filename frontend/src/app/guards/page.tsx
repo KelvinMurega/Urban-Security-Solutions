@@ -5,9 +5,15 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '../../components/AdminLayout';
+import { resolveApiUrl } from '../../lib/api-url';
+import PageHeader from '../../components/ui/PageHeader';
+import StatusBadge from '../../components/ui/StatusBadge';
+import { useToast } from '../../components/ui/ToastProvider';
 
 export default function GuardsPage() {
   const router = useRouter();
+  const apiUrl = resolveApiUrl();
+  const { showToast } = useToast();
   const [guards, setGuards] = useState<any[]>([]);
   const [sites, setSites] = useState<any[]>([]);
 
@@ -24,13 +30,14 @@ export default function GuardsPage() {
   const fetchData = async () => {
     try {
       const [guardsRes, sitesRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/users/guards'),
-        axios.get('http://localhost:5000/api/sites')
+        axios.get(`${apiUrl}/api/users/guards`),
+        axios.get(`${apiUrl}/api/sites`)
       ]);
       setGuards(guardsRes.data);
       setSites(sitesRes.data);
     } catch (err) {
       console.error(err);
+      showToast('Failed to load guards.', 'error');
     }
   };
 
@@ -59,26 +66,35 @@ export default function GuardsPage() {
     try {
       // Only send fields expected by backend
       const payload: any = {
-        name: form.name,
-        email: form.email,
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
         password: form.password,
-        phone: form.phone,
+        phone: form.phone.trim(),
         siteId: form.siteId || undefined,
         role: 'GUARD',
       };
 
       if (editingId) {
-        await axios.put(`http://localhost:5000/api/users/guards/${editingId}`, payload);
+        await axios.put(`${apiUrl}/api/users/guards/${editingId}`, payload);
       } else {
-        await axios.post('http://localhost:5000/api/users/guards', payload);
+        await axios.post(`${apiUrl}/api/users/guards`, payload);
       }
 
       setForm({ name: '', email: '', password: '', phone: '', siteId: '', status: 'ACTIVE' });
       setShowForm(false);
       setEditingId(null);
       fetchData();
-    } catch (err) {
-      alert('Operation failed. Check details.');
+      showToast(editingId ? 'Guard profile updated.' : 'Guard created successfully.', 'success');
+    } catch (err: any) {
+      const data = err?.response?.data;
+      if (Array.isArray(data?.error)) {
+        const firstIssue = data.error[0];
+        showToast(firstIssue?.message || 'Validation failed. Check all fields.', 'error');
+      } else if (typeof data?.error === 'string') {
+        showToast(data.error, 'error');
+      } else {
+        showToast('Operation failed. Check details.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -88,18 +104,15 @@ export default function GuardsPage() {
     <AdminLayout>
       <div className="max-w-6xl mx-auto">
 
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Security Personnel</h1>
-            <p className="text-gray-500">Manage your workforce</p>
-          </div>
-          {/* Removed "Back to Dashboard" button since we have Sidebar now */}
-          <div className="space-x-4">
-            <button onClick={handleAddNew} className="bg-blue-900 text-white px-4 py-2 rounded hover:bg-blue-800">
+        <PageHeader
+          title="Security Personnel"
+          subtitle="Manage your workforce."
+          right={
+            <button onClick={handleAddNew} className="w-full sm:w-auto bg-blue-900 text-white px-4 py-2 rounded hover:bg-blue-800">
               {showForm && !editingId ? 'Cancel' : '+ Hire New Guard'}
             </button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Form Area */}
         {showForm && (
@@ -109,17 +122,18 @@ export default function GuardsPage() {
             </h2>
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <input placeholder="Full Name" className="border p-2 rounded text-black"
-                value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
+                value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} minLength={2} required />
 
               <input placeholder="Email Address" type="email" className="border p-2 rounded text-black"
                 value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
 
               <input placeholder="Phone Number" className="border p-2 rounded text-black"
-                value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
+                value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} minLength={7} required />
 
               <input placeholder={editingId ? "Reset Password (Optional)" : "Password"} type="password"
                 className="border p-2 rounded text-black"
                 value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                minLength={6}
                 required={!editingId}
               />
 
@@ -144,7 +158,7 @@ export default function GuardsPage() {
         )}
 
         {/* List Table */}
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="bg-white shadow rounded-lg overflow-hidden overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-100">
               <tr>
@@ -176,10 +190,10 @@ export default function GuardsPage() {
 
                   {/* 3. Status Column */}
                   <td className="px-6 py-4">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${guard.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}>
-                      {guard.status || 'ACTIVE'}
-                    </span>
+                    <StatusBadge
+                      label={guard.status || 'ACTIVE'}
+                      tone={guard.status === 'ACTIVE' ? 'success' : 'danger'}
+                    />
                   </td>
 
                   {/* 4. Action Column (UPDATED) */}

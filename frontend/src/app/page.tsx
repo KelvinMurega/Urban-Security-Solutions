@@ -1,14 +1,15 @@
-// frontend/src/app/page.tsx
 'use client';
 
 import { FormEvent, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
+import { resolveApiUrl } from '../lib/api-url';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -18,99 +19,131 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // Use environment variables for API URLs for better flexibility
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const apiUrl = resolveApiUrl();
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedPassword = password.trim();
+
       const res = await axios.post(`${apiUrl}/api/auth/login`, {
-        email,
-        password
+        email: normalizedEmail,
+        password: normalizedPassword
       });
 
       const { token, user: userData } = res.data;
 
-      // The backend should always return a token and user object on success.
-      // Fail safely instead of making assumptions about user data.
       if (!token || !userData?.role) {
         setError('Login failed: No token received from server.');
         return;
       }
 
-      // 1. Save Token & User Data
-      // SECURITY NOTE: Storing tokens in localStorage is vulnerable to XSS attacks.
-      // For production apps, consider using httpOnly cookies set by the server.
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(userData));
 
-      console.log("Login Success. Role:", userData.role);
-
-      // 2. Redirect based on Role
-      // localStorage.setItem is synchronous, so no timeout is needed.
       if (userData.role === 'GUARD') {
         router.push('/guard/dashboard');
       } else {
         router.push('/dashboard');
       }
-    } catch (err) {
-      console.error(err);
-      setError('Invalid email or password.');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const serverMessage = (err.response?.data as { error?: string } | undefined)?.error;
+        setError(serverMessage || 'Invalid email or password.');
+      } else {
+        setError('Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
-        
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">URBAN SECURITY</h1>
-          <p className="text-gray-500 mt-2">Personnel Login</p>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(20,184,166,0.25),transparent_35%),radial-gradient(circle_at_85%_15%,rgba(56,189,248,0.18),transparent_35%),linear-gradient(160deg,#020617_0%,#0f172a_50%,#111827_100%)]" />
+
+      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 sm:px-6">
+        <div className="grid w-full overflow-hidden rounded-2xl border border-white/10 bg-white/95 shadow-2xl backdrop-blur md:grid-cols-2">
+          <div className="hidden bg-slate-900 p-10 text-white md:flex md:flex-col md:justify-between">
+            <div>
+              <p className="inline-flex rounded-full border border-cyan-300/30 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-cyan-200">
+                Security Operations
+              </p>
+              <h1 className="mt-6 text-3xl font-bold leading-tight">Urban Security Solutions</h1>
+              <p className="mt-3 max-w-sm text-sm text-slate-300">
+                Access your command center, monitor site activity, and coordinate shift operations.
+              </p>
+            </div>
+
+            <div className="space-y-3 text-sm text-slate-300">
+              <p className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">Live shift visibility</p>
+              <p className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">Incident and guard tracking</p>
+              <p className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">Role-based access control</p>
+            </div>
+          </div>
+
+          <div className="p-6 sm:p-8 md:p-10">
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
+              <p className="mt-1 text-sm text-slate-600">Authorized personnel only</p>
+            </div>
+
+            {error && (
+              <div className="mb-5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label htmlFor="email" className="mb-1 block text-sm font-semibold text-slate-700">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-black shadow-sm outline-none transition focus:border-cyan-600 focus:ring-2 focus:ring-cyan-200"
+                  placeholder="you@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="mb-1 block text-sm font-semibold text-slate-700">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    required
+                    className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 pr-20 text-black shadow-sm outline-none transition focus:border-cyan-600 focus:ring-2 focus:ring-cyan-200"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !email.trim() || !password.trim()}
+                className="flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? 'Verifying...' : 'Sign In'}
+              </button>
+            </form>
+          </div>
         </div>
-
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm text-center">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div>
-            <label htmlFor="email" className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
-            <input 
-              id="email"
-              type="email" 
-              required
-              className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-900 outline-none transition"
-              placeholder="name@urbansecurity.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-bold text-gray-700 mb-2">Password</label>
-            <input 
-              id="password"
-              type="password" 
-              required
-              className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-900 outline-none transition"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-blue-900 text-white py-3 rounded font-bold hover:bg-blue-800 transition duration-200"
-          >
-            {loading ? 'Authenticating...' : 'Access System'}
-          </button>
-        </form>
-        
-        <p className="mt-6 text-center text-xs text-gray-400">
-          Unauthorized access is prohibited.
-        </p>
       </div>
     </div>
   );

@@ -10,15 +10,32 @@ export class AuthService {
 
   // 1. Validate User (Check password)
   static async validateUser(email: string, pass: string) {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const inputEmail = String(email || '').trim();
+    const rawPassword = String(pass || '');
+
+    let user = await prisma.user.findUnique({ where: { email: inputEmail } });
+
+    // Fallback for databases where email collation may be case-sensitive.
+    if (!user) {
+      const users = await prisma.user.findMany();
+      user = users.find((u) => u.email.toLowerCase() === inputEmail.toLowerCase()) || null;
+    }
+
     if (!user) return null;
 
     // Check if password matches (using bcrypt)
-    const isValid = await bcrypt.compare(pass, user.password);
+    let isValid = await bcrypt.compare(rawPassword, user.password);
     
     // Fallback: If your database has old plain-text passwords (from early testing)
     // this check handles that so you don't get locked out.
-    if (!isValid && pass === user.password) return user; 
+    if (!isValid && rawPassword === user.password) return user;
+
+    // Handle accidental spaces pasted into password fields.
+    if (!isValid && rawPassword.trim() !== rawPassword) {
+      const trimmedPassword = rawPassword.trim();
+      isValid = await bcrypt.compare(trimmedPassword, user.password);
+      if (!isValid && trimmedPassword === user.password) return user;
+    }
 
     if (!isValid) return null;
     
@@ -37,8 +54,9 @@ export class AuthService {
   // 3. Register
   static async register(data: any) {
     const hashedPassword = await bcrypt.hash(data.password, 10);
+    const normalizedEmail = String(data.email || '').trim().toLowerCase();
     return await prisma.user.create({
-      data: { ...data, password: hashedPassword }
+      data: { ...data, email: normalizedEmail, password: hashedPassword }
     });
   }
 }
