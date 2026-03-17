@@ -49,7 +49,7 @@ export default function GuardSchedulePage() {
       try {
         const [shiftRes, guardRes] = await Promise.all([
           axios.get(`${apiUrl}/api/shifts`),
-          axios.get(`${apiUrl}/api/users/guards`)
+          axios.get(`${apiUrl}/api/auth/guards-lite`)
         ]);
 
         const guardShifts = (shiftRes.data as Shift[]).filter((shift) => shift.userId === user.id);

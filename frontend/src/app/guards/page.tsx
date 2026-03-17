@@ -6,6 +6,7 @@ import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '../../components/AdminLayout';
 import { resolveApiUrl } from '../../lib/api-url';
+import { resolveAvatarUrl } from '../../lib/avatar-url';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { useToast } from '../../components/ui/ToastProvider';
@@ -174,13 +175,33 @@ export default function GuardsPage() {
 
                   {/* 1. Name Column (Clickable) */}
                   <td className="px-6 py-4">
-                    <div
-                      onClick={() => router.push(`/guards/${guard.id}`)}
-                      className="font-bold text-indigo-600 hover:text-indigo-900 cursor-pointer hover:underline text-lg"
-                    >
-                      {guard.name}
+                    <div className="flex items-center gap-3">
+                      {guard.avatarUrl ? (
+                        <img
+                          src={resolveAvatarUrl(guard.avatarUrl, apiUrl)}
+                          alt={guard.name}
+                          className="h-11 w-11 rounded-full border border-gray-200 object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">
+                          {String(guard.name || 'G')
+                            .split(' ')
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((part: string) => part[0]?.toUpperCase())
+                            .join('')}
+                        </div>
+                      )}
+                      <div>
+                        <div
+                          onClick={() => router.push(`/guards/${guard.id}`)}
+                          className="font-bold text-indigo-600 hover:text-indigo-900 cursor-pointer hover:underline text-lg"
+                        >
+                          {guard.name}
+                        </div>
+                        <div className="text-sm text-gray-500">{guard.email}</div>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-500">{guard.email}</div>
                   </td>
 
                   {/* 2. Site Column */}

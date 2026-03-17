@@ -22,28 +22,27 @@ type Site = {
   id: string;
   name: string;
   address: string;
-  contactPhone?: string;
+  location?: string;
   users: Guard[];
 };
+
 export default function SiteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id } = use(params);
   const apiUrl = resolveApiUrl();
   const { showToast } = useToast();
 
-  // Data State
   const [site, setSite] = useState<Site | null>(null);
-  const [allGuards, setAllGuards] = useState<Guard[]>([]); // To populate the dropdown
-
-  // Editing State
+  const [allGuards, setAllGuards] = useState<Guard[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState<{ name: string; address: string; contactPhone: string }>({ name: '', address: '', contactPhone: '' });
-
-  // Assigning State
+  const [editForm, setEditForm] = useState<{ name: string; address: string; location: string }>({
+    name: '',
+    address: '',
+    location: ''
+  });
   const [selectedGuardId, setSelectedGuardId] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // 1. Fetch Data
   useEffect(() => {
     fetchData();
   }, [id]);
@@ -56,12 +55,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
       ]);
       setSite(siteRes.data);
       setAllGuards(guardsRes.data);
-
-      // Pre-fill edit form
       setEditForm({
         name: siteRes.data.name,
         address: siteRes.data.address,
-        contactPhone: siteRes.data.contactPhone || ''
+        location: siteRes.data.location || ''
       });
     } catch (err) {
       console.error(err);
@@ -69,33 +66,30 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  // 2. Handle Site Update (Edit Details)
   const handleUpdateSite = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await axios.put(`${apiUrl}/api/sites/${id}`, editForm);
       setIsEditing(false);
-      fetchData(); // Refresh data
+      fetchData();
       showToast('Site details updated.', 'success');
     } catch (err) {
       showToast('Failed to update site details.', 'error');
     }
   };
 
-  // 3. Handle Assigning an Existing Guard
   const handleAssignGuard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedGuardId) return;
 
     setLoading(true);
     try {
-      // We update the guard's "siteId" to match THIS site
-      await axios.put(`${apiUrl}/api/users/guards/${selectedGuardId}`, {
-        siteId: id
+      await axios.post(`${apiUrl}/api/sites/${id}/guards`, {
+        guardId: selectedGuardId
       });
 
       setSelectedGuardId('');
-      fetchData(); // Refresh lists
+      fetchData();
       showToast('Guard assigned to site.', 'success');
     } catch (err) {
       showToast('Failed to assign guard.', 'error');
@@ -104,11 +98,9 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  // 4. Handle Removing a Guard (Unassign)
   const handleRemoveGuard = async (guardId: string) => {
-    if(!confirm("Remove this guard from the site?")) return;
+    if (!confirm('Remove this guard from the site?')) return;
     try {
-      // Set siteId to undefined to unassign (backend expects undefined or omit)
       await axios.put(`${apiUrl}/api/users/guards/${guardId}`, {
         siteId: undefined
       });
@@ -133,26 +125,25 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             </button>
           }
         />
-        
-        {/* SECTION 1: SITE DETAILS HEADER (Editable) */}
+
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           {!isEditing ? (
             <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
               <div>
                 <div className="mt-2 space-y-1 text-gray-600">
-                  <p>📍 {site.address}</p>
-                  <p>📞 {site.contactPhone || 'No phone listed'}</p>
+                  <p>Address: {site.address}</p>
+                  <p>Location: {site.location || 'No location notes'}</p>
                 </div>
                 <div className="mt-4">
                   <StatusBadge label="Active Site" tone="success" />
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-                 <button 
+                <button
                   onClick={() => setIsEditing(true)}
                   className="w-full sm:w-auto bg-gray-100 text-gray-700 px-4 py-2 rounded hover:bg-gray-200 transition font-medium"
                 >
-                  ✎ Edit Details
+                  Edit Details
                 </button>
               </div>
             </div>
@@ -160,12 +151,26 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             <form onSubmit={handleUpdateSite} className="space-y-4">
               <h2 className="text-xl font-bold text-blue-900">Editing Site Details</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <input className="border p-2 rounded text-black" placeholder="Site Name" 
-                  value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} required />
-                <input className="border p-2 rounded text-black" placeholder="Address" 
-                  value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} required />
-                <input className="border p-2 rounded text-black" placeholder="Contact Phone" 
-                  value={editForm.contactPhone} onChange={e => setEditForm({...editForm, contactPhone: e.target.value})} />
+                <input
+                  className="border p-2 rounded text-black"
+                  placeholder="Site Name"
+                  value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                />
+                <input
+                  className="border p-2 rounded text-black"
+                  placeholder="Address"
+                  value={editForm.address}
+                  onChange={e => setEditForm({ ...editForm, address: e.target.value })}
+                  required
+                />
+                <input
+                  className="border p-2 rounded text-black"
+                  placeholder="Location Notes"
+                  value={editForm.location}
+                  onChange={e => setEditForm({ ...editForm, location: e.target.value })}
+                />
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
                 <button type="submit" className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save Changes</button>
@@ -176,31 +181,29 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          
-          {/* SECTION 2: ASSIGNED GUARDS LIST */}
           <div>
             <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-              👮 Assigned Personnel 
+              Assigned Personnel
               <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">{(site.users || []).length}</span>
             </h2>
-            
+
             <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
               {(site.users || []).length === 0 ? (
                 <div className="p-8 text-center text-gray-400 italic">No guards currently assigned.</div>
               ) : (
                 <ul className="divide-y divide-gray-100">
-                  {(site.users || []).map((guard: any) => (
+                  {(site.users || []).map((guard: Guard) => (
                     <li key={guard.id} className="p-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 hover:bg-gray-50 transition">
                       <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
-                           {guard.name.charAt(0)}
-                         </div>
-                         <div>
-                           <p className="font-bold text-gray-800 text-sm">{guard.name}</p>
-                           <p className="text-xs text-gray-500">{guard.email}</p>
-                         </div>
+                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
+                          {guard.name.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-800 text-sm">{guard.name}</p>
+                          <p className="text-xs text-gray-500">{guard.email}</p>
+                        </div>
                       </div>
-                      <button 
+                      <button
                         onClick={() => handleRemoveGuard(guard.id)}
                         className="w-full sm:w-auto text-red-400 hover:text-red-600 text-xs border border-red-200 px-2 py-1 rounded hover:bg-red-50"
                       >
@@ -213,13 +216,12 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
 
-          {/* SECTION 3: ASSIGN EXISTING GUARD */}
           <div className="bg-white p-6 rounded-lg shadow h-fit border-t-4 border-indigo-600">
             <h3 className="text-lg font-bold text-gray-800 mb-2">Deploy Existing Guard</h3>
             <p className="text-sm text-gray-500 mb-4">Select a guard from your workforce to assign to this location.</p>
-            
+
             <form onSubmit={handleAssignGuard} className="space-y-4">
-              <select 
+              <select
                 className="w-full border p-2 rounded text-black"
                 value={selectedGuardId}
                 onChange={e => setSelectedGuardId(e.target.value)}
@@ -227,16 +229,16 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               >
                 <option value="">-- Select Guard --</option>
                 {allGuards
-                  .filter(g => g.siteId !== id) // Hide guards already here
+                  .filter(g => g.siteId !== id)
                   .map(g => (
                     <option key={g.id} value={g.id}>
                       {g.name} {g.site ? `(Currently at: ${g.site.name})` : '(Unassigned)'}
                     </option>
-                ))}
+                  ))}
               </select>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={loading}
                 className="w-full bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700 font-bold shadow transition"
               >
@@ -244,7 +246,6 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
               </button>
             </form>
           </div>
-
         </div>
       </div>
     </AdminLayout>

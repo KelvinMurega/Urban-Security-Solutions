@@ -45,6 +45,7 @@ model User {
   password  String
   name      String
   phone     String?
+  avatarUrl String?  @db.LongText
   role      Role     @default(GUARD) // Uses the Enum instead of String
   status    UserStatus @default(ACTIVE)
 

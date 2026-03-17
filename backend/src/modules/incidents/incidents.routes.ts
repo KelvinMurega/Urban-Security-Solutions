@@ -5,6 +5,7 @@ const router = Router();
 
 router.post('/', IncidentController.create);
 router.get('/', IncidentController.getAll);
+router.get('/:id', IncidentController.getById);
 router.put('/:id', IncidentController.update);
 
 export default router;

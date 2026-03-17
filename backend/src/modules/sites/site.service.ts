@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -69,7 +69,43 @@ export const deleteSite = async (id: string) => {
 };
 
 export const addGuardToSite = async (siteId: string, data: any) => {
-  // Placeholder: Implement logic to add/link a guard to the site
-  // This prevents the controller from crashing due to missing method
-  return { message: 'Guard added to site', siteId, ...data };
+  const guardId = String(data.userId || data.guardId || '').trim();
+  if (!guardId) {
+    throw new Error('guardId is required.');
+  }
+
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { id: true } });
+  if (!site) {
+    throw new Error('Site not found.');
+  }
+
+  const guard = await prisma.user.findUnique({
+    where: { id: guardId },
+    select: { id: true, role: true, status: true }
+  });
+
+  if (!guard) {
+    throw new Error('Guard not found.');
+  }
+
+  if (guard.role !== Role.GUARD) {
+    throw new Error('Only GUARD users can be assigned to a site.');
+  }
+
+  if (guard.status !== 'ACTIVE') {
+    throw new Error('Cannot assign an inactive guard.');
+  }
+
+  return await prisma.user.update({
+    where: { id: guardId },
+    data: { siteId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      status: true,
+      siteId: true
+    }
+  });
 };

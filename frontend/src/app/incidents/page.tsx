@@ -280,30 +280,32 @@ export default function IncidentsPage() {
 
         {/* --- MODALS --- */}
         {showLogModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print">
-            <div className="bg-white p-5 md:p-6 rounded-lg w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
-              <h2 className="text-xl font-bold mb-4">Log New Incident</h2>
-              <form onSubmit={handleReport} className="space-y-4">
-                <input className="w-full border p-2 rounded" placeholder="Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
-                <textarea className="w-full border p-2 rounded h-24" placeholder="Description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} required />
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 no-print">
+            <div className="bg-white p-0 md:p-0 rounded-xl w-full max-w-md shadow-2xl border-t-8 border-red-700 max-h-[90vh] overflow-y-auto">
+              <div className="bg-red-700 rounded-t-xl px-6 py-4">
+                <h2 className="text-xl font-bold text-white">Log New Incident</h2>
+              </div>
+              <form onSubmit={handleReport} className="space-y-4 px-5 md:px-6 py-5">
+                <input className="w-full border p-2 rounded text-gray-900 placeholder-gray-500" placeholder="Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
+                <textarea className="w-full border p-2 rounded h-24 text-gray-900 placeholder-gray-500" placeholder="Description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} required />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <select className="border p-2 rounded" value={form.siteId} onChange={e => setForm({ ...form, siteId: e.target.value })} required>
+                  <select className="border p-2 rounded text-gray-900" value={form.siteId} onChange={e => setForm({ ...form, siteId: e.target.value })} required>
                     <option value="">Select Site</option>
                     {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
-                  <select className="border p-2 rounded" value={form.userId} onChange={e => setForm({ ...form, userId: e.target.value })} required>
+                  <select className="border p-2 rounded text-gray-900" value={form.userId} onChange={e => setForm({ ...form, userId: e.target.value })} required>
                     <option value="">Select Guard</option>
                     {guards.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                   </select>
                 </div>
-                <select className="w-full border p-2 rounded" value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}>
+                <select className="w-full border p-2 rounded text-gray-900" value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}>
                   <option value="LOW">Low</option>
                   <option value="MEDIUM">Medium</option>
                   <option value="HIGH">High</option>
                   <option value="CRITICAL">Critical</option>
                 </select>
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                  <button type="button" onClick={() => setShowLogModal(false)} className="flex-1 bg-gray-200 py-2 rounded">Cancel</button>
+                  <button type="button" onClick={() => setShowLogModal(false)} className="flex-1 bg-gray-200 text-gray-900 py-2 rounded">Cancel</button>
                   <button type="submit" disabled={loading} className="flex-1 bg-red-700 text-white py-2 rounded">{loading ? 'Saving...' : 'Log Incident'}</button>
                 </div>
               </form>

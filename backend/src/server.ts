@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { networkInterfaces, NetworkInterfaceInfo } from 'os';
+import path from 'path';
 import apiRouter from './routes'; // Import the centralized router
 import { unassignAdminsFromSites } from './modules/users/users.service';
 
@@ -37,8 +38,9 @@ app.use(
     credentials: true
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Single entry point for all API routes
 app.use('/api', apiRouter);

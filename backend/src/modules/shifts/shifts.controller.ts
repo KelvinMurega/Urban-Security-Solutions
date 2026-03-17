@@ -1,10 +1,19 @@
 import { Request, Response } from 'express';
+import { Role } from '@prisma/client';
 import { ShiftService } from './shifts.service';
 
 export class ShiftController {
 
   static async create(req: Request, res: Response) {
     try {
+      const actor = (req as any).user as { id: string; role: Role } | undefined;
+      if (!actor) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      if (actor.role !== Role.ADMIN) {
+        return res.status(403).json({ error: 'Only admins can assign shifts.' });
+      }
+
       const shift = await ShiftService.createShift(req.body);
       res.status(201).json(shift);
     } catch (error: any) {
@@ -14,7 +23,15 @@ export class ShiftController {
 
   static async getAll(req: Request, res: Response) {
     try {
-      const shifts = await ShiftService.getAllShifts();
+      const actor = (req as any).user as { id: string; role: Role } | undefined;
+      if (!actor) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const shifts =
+        actor.role === Role.ADMIN
+          ? await ShiftService.getAllShifts()
+          : await ShiftService.getShiftsByUser(actor.id);
       res.json(shifts);
     } catch (error: any) {
       res.status(500).json({ error: error.message });

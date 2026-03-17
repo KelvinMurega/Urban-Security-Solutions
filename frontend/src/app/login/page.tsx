@@ -34,7 +34,11 @@ export default function LoginPage() {
         if (user) {
           localStorage.setItem('user', JSON.stringify(user));
         }
-        router.push('/dashboard');
+        if (user?.role === 'GUARD') {
+          router.push('/guard/dashboard');
+        } else {
+          router.push('/dashboard');
+        }
       }
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {

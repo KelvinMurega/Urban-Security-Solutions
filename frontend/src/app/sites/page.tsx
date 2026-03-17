@@ -18,7 +18,7 @@ export default function SitesPage() {
   
   // MODAL STATE
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newSite, setNewSite] = useState({ name: '', address: '', contactPhone: '' });
+  const [newSite, setNewSite] = useState({ name: '', address: '', location: '' });
   const [loading, setLoading] = useState(false);
 
   // 1. Fetch Sites
@@ -45,7 +45,7 @@ export default function SitesPage() {
       
       // Success: Close modal, reset form, refresh list
       setShowCreateModal(false);
-      setNewSite({ name: '', address: '', contactPhone: '' });
+      setNewSite({ name: '', address: '', location: '' });
       fetchSites();
       showToast('Site created successfully.', 'success');
     } catch (err) {
@@ -97,7 +97,7 @@ export default function SitesPage() {
                   📍 {site.address}
                 </p>
                 <p className="text-sm text-gray-500 flex items-center gap-2">
-                  📞 {site.contactPhone || 'No contact info'}
+                  📍 {site.location || 'No location notes'}
                 </p>
               </div>
 
@@ -141,12 +141,12 @@ export default function SitesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Location Notes</label>
                   <input 
-                    placeholder="e.g. +254 700 000000" 
+                    placeholder="e.g. Near west gate" 
                     className="w-full border p-2 rounded text-black focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={newSite.contactPhone}
-                    onChange={e => setNewSite({...newSite, contactPhone: e.target.value})}
+                    value={newSite.location}
+                    onChange={e => setNewSite({...newSite, location: e.target.value})}
                     required
                   />
                 </div>

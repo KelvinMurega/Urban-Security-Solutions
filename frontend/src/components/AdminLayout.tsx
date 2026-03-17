@@ -31,7 +31,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
 
     try {
-      const parsedUser = JSON.parse(user) as { id?: string; name?: string };
+      const parsedUser = JSON.parse(user) as { id?: string; name?: string; role?: string };
+      if (parsedUser.role === 'GUARD') {
+        router.push('/guard/dashboard');
+        return;
+      }
       setUserName(parsedUser.name || 'Admin');
 
       if (parsedUser.id) {

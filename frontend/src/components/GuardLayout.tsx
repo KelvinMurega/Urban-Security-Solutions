@@ -4,15 +4,27 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { resolveApiUrl } from '../lib/api-url';
+import { resolveAvatarUrl } from '../lib/avatar-url';
 
 export default function GuardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const apiUrl = resolveApiUrl();
   const [userName, setUserName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const displayAvatarUrl = resolveAvatarUrl(avatarUrl, apiUrl);
 
-  useEffect(() => {
-    // 1. Security Check
+  const handleLogout = () => {
+    if (confirm('Are you sure you want to log out?')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      router.push('/');
+    }
+  };
+
+  const refreshSessionDetails = () => {
     const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
 
@@ -21,20 +33,44 @@ export default function GuardLayout({ children }: { children: React.ReactNode })
       return;
     }
 
-    const user = JSON.parse(userStr);
+    try {
+      const user = JSON.parse(userStr) as { role?: string; name?: string; id?: string; avatarUrl?: string | null };
+      if (user.role && user.role !== 'GUARD') {
+        router.push('/dashboard');
+        return;
+      }
 
-    if (user.role && user.role !== 'GUARD') {
-      router.push('/dashboard');
-      return;
+      setUserName(user.name || 'Guard');
+      const localFallback = user.id ? localStorage.getItem(`profile-avatar-${user.id}`) || '' : '';
+      setAvatarUrl(user.avatarUrl || localFallback);
+      setIsAuthorized(true);
+    } catch (error) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      router.push('/');
     }
-    
-    // 2. Role Check (Kick out Admins who stumble here?)
-    // Optional: You might want Admins to be able to see this too for testing.
-    // For now, we just ensure they are logged in.
-    
-    setUserName(user.name || 'Guard');
-    setIsAuthorized(true);
+  };
+
+  useEffect(() => {
+    refreshSessionDetails();
   }, [router]);
+
+  useEffect(() => {
+    const onProfileUpdated = () => refreshSessionDetails();
+    const onStorageChanged = (event: StorageEvent) => {
+      if (event.key === 'user' || event.key?.startsWith('profile-avatar-')) {
+        refreshSessionDetails();
+      }
+    };
+
+    window.addEventListener('profile:updated', onProfileUpdated);
+    window.addEventListener('storage', onStorageChanged);
+
+    return () => {
+      window.removeEventListener('profile:updated', onProfileUpdated);
+      window.removeEventListener('storage', onStorageChanged);
+    };
+  }, []);
 
   if (!isAuthorized) return null;
 
@@ -43,11 +79,28 @@ export default function GuardLayout({ children }: { children: React.ReactNode })
       
       {/* Mobile Header */}
       <header className="bg-slate-900 text-white p-3 sm:p-4 flex justify-between items-center shadow-md sticky top-0 z-10">
-        <div>
-          <h1 className="text-lg font-bold tracking-wider">URBAN SEC</h1>
-          <p className="text-xs text-slate-400">Officer {userName.split(' ')[0]}</p>
+        <div className="flex items-center gap-3 overflow-hidden">
+          {displayAvatarUrl ? (
+            <img src={displayAvatarUrl} alt="Profile" className="h-10 w-10 rounded-full border border-slate-700 object-cover" />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-500 text-sm font-bold text-white">
+              {userName.charAt(0)?.toUpperCase() || 'G'}
+            </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold tracking-wider">URBAN SEC</h1>
+            <p className="truncate text-xs text-slate-300">Welcome {userName}</p>
+          </div>
         </div>
-        <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" title="Online"></div>
+        <div className="flex items-center gap-3">
+          <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" title="Online"></div>
+          <button
+            onClick={handleLogout}
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-semibold text-red-200 transition hover:bg-slate-800 hover:text-red-100"
+          >
+            Log Out
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}

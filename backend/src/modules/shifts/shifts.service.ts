@@ -55,6 +55,19 @@ export class ShiftService {
     return shifts.map((shift) => this.withWorkedHours(shift));
   }
 
+  static async getShiftsByUser(userId: string) {
+    const shifts = await prisma.shift.findMany({
+      where: { userId },
+      include: {
+        user: { select: { name: true, email: true } },
+        site: { select: { name: true } }
+      },
+      orderBy: { startTime: 'desc' }
+    });
+
+    return shifts.map((shift) => this.withWorkedHours(shift));
+  }
+
   static async checkInShift(shiftId: string, guardId: string, previousGuardName: string) {
     const shift = await prisma.shift.findUnique({ where: { id: shiftId } });
     if (!shift) {

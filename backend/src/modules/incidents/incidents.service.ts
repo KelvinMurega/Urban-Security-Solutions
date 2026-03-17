@@ -47,3 +47,16 @@ export const updateIncident = async (id: string, data: any) => {
     },
   });
 };
+
+export const getIncidentsByUser = async (userId: string) => {
+  return await prisma.incident.findMany({
+    where: { userId },
+    include: {
+      user: { select: { name: true, role: true } },
+      site: { select: { name: true } },
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+};
