@@ -9,13 +9,38 @@ import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { useToast } from '../../components/ui/ToastProvider';
 
+// --- Data Interfaces ---
+interface Site {
+  id: string;
+  name: string;
+}
+
+interface Guard {
+  id: string;
+  name: string;
+}
+
+interface Incident {
+  id: string;
+  title: string;
+  description: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  status: 'OPEN' | 'RESOLVED';
+  reportedAt: string; // ISO string
+  resolutionDetails?: string;
+  siteId: string;
+  userId: string;
+  site?: Site;
+  user?: Guard;
+}
+
 export default function IncidentsPage() {
   const apiUrl = resolveApiUrl();
   const { showToast } = useToast();
   // Data State
-  const [incidents, setIncidents] = useState<any[]>([]);
-  const [guards, setGuards] = useState<any[]>([]);
-  const [sites, setSites] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [guards, setGuards] = useState<Guard[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
 
   // UI State
   const [filterSiteId, setFilterSiteId] = useState('ALL');
@@ -23,7 +48,7 @@ export default function IncidentsPage() {
   const [showResolveModal, setShowResolveModal] = useState(false);
 
   // Forms & Selection
-  const [selectedIncident, setSelectedIncident] = useState<any>(null);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [resolutionText, setResolutionText] = useState('');
   const [form, setForm] = useState({
     title: '', description: '', severity: 'LOW', userId: '', siteId: ''
@@ -46,9 +71,9 @@ export default function IncidentsPage() {
         axios.get(`${apiUrl}/api/users/guards`),
         axios.get(`${apiUrl}/api/sites`)
       ]);
-      setIncidents(incRes.data);
-      setGuards(guardRes.data);
-      setSites(siteRes.data);
+      setIncidents(incRes.data as Incident[]);
+      setGuards(guardRes.data as Guard[]);
+      setSites(siteRes.data as Site[]);
     } catch (err) {
       console.error(err);
       showToast('Failed to load incidents data.', 'error');
@@ -80,7 +105,7 @@ export default function IncidentsPage() {
     }
     setLoading(true);
     try {
-      await axios.put(`${apiUrl}/api/incidents/${selectedIncident.id}`, {
+      await axios.put(`${apiUrl}/api/incidents/${selectedIncident?.id}`, {
         status: 'RESOLVED',
         resolutionDetails: resolutionText
       });
@@ -118,6 +143,7 @@ export default function IncidentsPage() {
             right={
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto">
                 <select
+                title="Filter by Site"
                   className="sm:col-span-3 md:col-span-1 border p-2 rounded text-gray-700 bg-white shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
                   value={filterSiteId}
                   onChange={(e) => setFilterSiteId(e.target.value)}
@@ -151,7 +177,7 @@ export default function IncidentsPage() {
               No incidents found for this selection.
             </div>
           ) : (
-            filteredIncidents.map((inc) => (
+            filteredIncidents.map((inc: Incident) => (
               <div key={inc.id} className={`bg-white p-4 md:p-6 rounded-lg shadow-sm border-l-4 ${inc.status === 'RESOLVED' ? 'border-green-500' : 'border-red-500'}`}>
                 <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                   <div className="flex-1">
@@ -235,7 +261,7 @@ export default function IncidentsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredIncidents.map((inc) => (
+              {filteredIncidents.map((inc: Incident) => (
                 <tr key={inc.id}>
                   <td className="font-mono text-sm">
                     {new Date(inc.reportedAt).toLocaleDateString()}<br />
