@@ -1,6 +1,26 @@
 import { Request, Response } from 'express';
 import { Role } from '@prisma/client';
 import { ShiftService } from './shifts.service';
+import { z } from 'zod';
+
+const shiftCreateSchema = z.object({
+  userId: z.string().min(1),
+  siteId: z.string().min(1),
+  startTime: z.string().min(1),
+  endTime: z.string().min(1),
+});
+
+const checkInSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  previousGuardId: z.string().min(1).optional(),
+});
+
+const checkOutSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  nextGuardId: z.string().min(1).optional(),
+});
 
 export class ShiftController {
 
@@ -14,7 +34,12 @@ export class ShiftController {
         return res.status(403).json({ error: 'Only admins can assign shifts.' });
       }
 
-      const shift = await ShiftService.createShift(req.body);
+      const parsed = shiftCreateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues });
+      }
+
+      const shift = await ShiftService.createShift(parsed.data);
       res.status(201).json(shift);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -40,16 +65,20 @@ export class ShiftController {
 
   static async checkIn(req: Request, res: Response) {
     try {
-      const { previousGuardName } = req.body;
       const guardId = (req as any).user?.id;
-      if (!guardId || !previousGuardName) {
-        return res.status(400).json({ error: 'previousGuardName is required.' });
+      if (!guardId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const parsed = checkInSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues });
       }
 
       const shift = await ShiftService.checkInShift(
         req.params.id as string,
         String(guardId),
-        String(previousGuardName).trim()
+        parsed.data
       );
       res.json(shift);
     } catch (error: any) {
@@ -59,16 +88,20 @@ export class ShiftController {
 
   static async checkOut(req: Request, res: Response) {
     try {
-      const { nextGuardName } = req.body;
       const guardId = (req as any).user?.id;
-      if (!guardId || !nextGuardName) {
-        return res.status(400).json({ error: 'nextGuardName is required.' });
+      if (!guardId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const parsed = checkOutSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues });
       }
 
       const shift = await ShiftService.checkOutShift(
         req.params.id as string,
         String(guardId),
-        String(nextGuardName).trim()
+        parsed.data
       );
       res.json(shift);
     } catch (error: any) {

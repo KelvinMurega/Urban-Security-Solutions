@@ -151,8 +151,8 @@ export default function ShiftsPage() {
                       {shift.checkedInAt ? (
                         <div>
                           <p>{formatDate(shift.checkedInAt)}</p>
-                          {shift.checkInFromGuardName && (
-                            <p className="text-xs text-gray-500">From: {shift.checkInFromGuardName}</p>
+                          {shift.checkInFromUser && (
+                            <p className="text-xs text-gray-500">From: {shift.checkInFromUser.name}</p>
                           )}
                         </div>
                       ) : (
@@ -163,8 +163,8 @@ export default function ShiftsPage() {
                       {shift.checkedOutAt ? (
                         <div>
                           <p>{formatDate(shift.checkedOutAt)}</p>
-                          {shift.checkOutToGuardName && (
-                            <p className="text-xs text-gray-500">To: {shift.checkOutToGuardName}</p>
+                          {shift.checkOutToUser && (
+                            <p className="text-xs text-gray-500">To: {shift.checkOutToUser.name}</p>
                           )}
                         </div>
                       ) : (

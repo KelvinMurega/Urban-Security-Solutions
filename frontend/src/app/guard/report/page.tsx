@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { ShieldAlert, ClipboardList, CalendarClock } from 'lucide-react';
 import GuardLayout from '../../../components/GuardLayout';
 import { resolveApiUrl } from '../../../lib/api-url';
+import { useToast } from '../../../components/ui/ToastProvider';
 
 type Shift = {
   id: string;
@@ -13,17 +15,27 @@ type Shift = {
   startTime: string;
 };
 
+type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+const severityOptions: { value: Severity; label: string; activeClass: string }[] = [
+  { value: 'LOW', label: 'Low', activeClass: 'bg-blue-600 text-white border-blue-600' },
+  { value: 'MEDIUM', label: 'Medium', activeClass: 'bg-amber-500 text-white border-amber-500' },
+  { value: 'HIGH', label: 'High', activeClass: 'bg-orange-600 text-white border-orange-600' },
+  { value: 'CRITICAL', label: 'Critical', activeClass: 'bg-rose-600 text-white border-rose-600' },
+];
+
 export default function GuardReportPage() {
   const apiUrl = resolveApiUrl();
+  const { showToast } = useToast();
   const [guardId, setGuardId] = useState<string>('');
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'incident' | 'log'>('incident');
 
   const [incidentForm, setIncidentForm] = useState({
     title: '',
     description: '',
-    severity: 'MEDIUM',
+    severity: 'MEDIUM' as Severity,
     shiftId: ''
   });
 
@@ -71,7 +83,6 @@ export default function GuardReportPage() {
     if (!selectedShift || !guardId) return;
 
     setLoading(true);
-    setMessage('');
     try {
       await axios.post(`${apiUrl}/api/incidents`, {
         title: incidentForm.title,
@@ -81,11 +92,10 @@ export default function GuardReportPage() {
         siteId: selectedShift.siteId
       });
 
-      setIncidentForm((prev) => ({ ...prev, title: '', description: '' }));
-      setMessage('Incident submitted successfully.');
-    } catch (error) {
-      console.error(error);
-      setMessage('Failed to submit incident.');
+      setIncidentForm((prev) => ({ ...prev, title: '', description: '', severity: 'MEDIUM' }));
+      showToast('Incident submitted successfully.', 'success');
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Failed to submit incident.', 'error');
     } finally {
       setLoading(false);
     }
@@ -96,7 +106,6 @@ export default function GuardReportPage() {
     if (!guardId || !logForm.shiftId) return;
 
     setLoading(true);
-    setMessage('');
     try {
       await axios.post(`${apiUrl}/api/reports`, {
         content: logForm.content,
@@ -104,117 +113,152 @@ export default function GuardReportPage() {
         shiftId: logForm.shiftId
       });
       setLogForm((prev) => ({ ...prev, content: '' }));
-      setMessage('Daily log submitted successfully.');
-    } catch (error) {
-      console.error(error);
-      setMessage('Failed to submit daily log.');
+      showToast('Daily log submitted successfully.', 'success');
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || 'Failed to submit daily log.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
+  const shiftSelect = (value: string, onChange: (value: string) => void) => (
+    <div>
+      <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+        <CalendarClock className="h-3.5 w-3.5" />
+        Shift
+      </label>
+      <select
+        className="w-full rounded-lg border border-gray-300 p-3 text-base text-black outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 sm:text-sm"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required
+      >
+        <option value="">Select shift</option>
+        {shifts.map((shift) => (
+          <option key={shift.id} value={shift.id}>
+            {shift.site?.name || 'Site'} · {new Date(shift.startTime).toLocaleDateString()}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
   return (
     <GuardLayout>
-      <div className="max-w-2xl mx-auto p-3 sm:p-4 space-y-6">
+      <div className="max-w-2xl mx-auto space-y-5">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Report Center</h1>
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Report Center</h1>
           <p className="text-sm text-gray-500">Submit incidents and daily shift logs.</p>
         </div>
 
-        {message && (
-          <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 text-sm rounded-lg p-3">
-            {message}
+        {/* Tab switcher */}
+        <div className="grid grid-cols-2 gap-2 rounded-xl border border-gray-200 bg-white p-1.5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setActiveTab('incident')}
+            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition ${
+              activeTab === 'incident' ? 'bg-rose-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <ShieldAlert className="h-4 w-4" />
+            Incident Report
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('log')}
+            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition ${
+              activeTab === 'log' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <ClipboardList className="h-4 w-4" />
+            Daily Log
+          </button>
+        </div>
+
+        {activeTab === 'incident' && (
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+            <form onSubmit={handleIncidentSubmit} className="space-y-4">
+              {shiftSelect(incidentForm.shiftId, (value) => setIncidentForm((prev) => ({ ...prev, shiftId: value })))}
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Title</label>
+                <input
+                  className="w-full rounded-lg border border-gray-300 p-3 text-base text-black outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 sm:text-sm"
+                  placeholder="e.g. Unauthorized entry attempt"
+                  value={incidentForm.title}
+                  onChange={(e) => setIncidentForm((prev) => ({ ...prev, title: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Description</label>
+                <textarea
+                  className="h-28 w-full rounded-lg border border-gray-300 p-3 text-base text-black outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 sm:text-sm"
+                  placeholder="Describe what happened..."
+                  value={incidentForm.description}
+                  onChange={(e) => setIncidentForm((prev) => ({ ...prev, description: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600">Severity</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {severityOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setIncidentForm((prev) => ({ ...prev, severity: option.value }))}
+                      className={`rounded-lg border py-2 text-xs font-semibold transition ${
+                        incidentForm.severity === option.value
+                          ? option.activeClass
+                          : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-lg bg-rose-600 py-3 font-semibold text-white transition hover:bg-rose-700 active:scale-[0.99] disabled:opacity-60"
+              >
+                {loading ? 'Submitting...' : 'Submit Incident'}
+              </button>
+            </form>
           </div>
         )}
 
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-          <h2 className="font-bold text-gray-900 mb-3">Incident Report</h2>
-          <form onSubmit={handleIncidentSubmit} className="space-y-3">
-            <select
-              className="w-full border p-2 rounded text-black"
-              value={incidentForm.shiftId}
-              onChange={(e) => setIncidentForm((prev) => ({ ...prev, shiftId: e.target.value }))}
-              required
-            >
-              <option value="">Select Shift</option>
-              {shifts.map((shift) => (
-                <option key={shift.id} value={shift.id}>
-                  {shift.site?.name || 'Site'} - {new Date(shift.startTime).toLocaleString()}
-                </option>
-              ))}
-            </select>
+        {activeTab === 'log' && (
+          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+            <form onSubmit={handleLogSubmit} className="space-y-4">
+              {shiftSelect(logForm.shiftId, (value) => setLogForm((prev) => ({ ...prev, shiftId: value })))}
 
-            <input
-              className="w-full border p-2 rounded text-black"
-              placeholder="Incident title"
-              value={incidentForm.title}
-              onChange={(e) => setIncidentForm((prev) => ({ ...prev, title: e.target.value }))}
-              required
-            />
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Observations</label>
+                <textarea
+                  className="h-32 w-full rounded-lg border border-gray-300 p-3 text-base text-black outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 sm:text-sm"
+                  placeholder="What did you observe during your shift?"
+                  value={logForm.content}
+                  onChange={(e) => setLogForm((prev) => ({ ...prev, content: e.target.value }))}
+                  required
+                />
+              </div>
 
-            <textarea
-              className="w-full border p-2 rounded text-black h-24"
-              placeholder="Describe what happened..."
-              value={incidentForm.description}
-              onChange={(e) => setIncidentForm((prev) => ({ ...prev, description: e.target.value }))}
-              required
-            />
-
-            <select
-              className="w-full border p-2 rounded text-black"
-              value={incidentForm.severity}
-              onChange={(e) => setIncidentForm((prev) => ({ ...prev, severity: e.target.value }))}
-            >
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-              <option value="CRITICAL">Critical</option>
-            </select>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-red-600 text-white py-2 rounded font-semibold hover:bg-red-700 transition"
-            >
-              {loading ? 'Submitting...' : 'Submit Incident'}
-            </button>
-          </form>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-          <h2 className="font-bold text-gray-900 mb-3">Daily Log</h2>
-          <form onSubmit={handleLogSubmit} className="space-y-3">
-            <select
-              className="w-full border p-2 rounded text-black"
-              value={logForm.shiftId}
-              onChange={(e) => setLogForm((prev) => ({ ...prev, shiftId: e.target.value }))}
-              required
-            >
-              <option value="">Select Shift</option>
-              {shifts.map((shift) => (
-                <option key={shift.id} value={shift.id}>
-                  {shift.site?.name || 'Site'} - {new Date(shift.startTime).toLocaleString()}
-                </option>
-              ))}
-            </select>
-
-            <textarea
-              className="w-full border p-2 rounded text-black h-28"
-              placeholder="What did you observe during your shift?"
-              value={logForm.content}
-              onChange={(e) => setLogForm((prev) => ({ ...prev, content: e.target.value }))}
-              required
-            />
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 text-white py-2 rounded font-semibold hover:bg-indigo-700 transition"
-            >
-              {loading ? 'Submitting...' : 'Submit Daily Log'}
-            </button>
-          </form>
-        </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-lg bg-indigo-600 py-3 font-semibold text-white transition hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-60"
+              >
+                {loading ? 'Submitting...' : 'Submit Daily Log'}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     </GuardLayout>
   );

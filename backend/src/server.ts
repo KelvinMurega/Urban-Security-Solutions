@@ -7,6 +7,9 @@ import { networkInterfaces, NetworkInterfaceInfo } from 'os';
 import path from 'path';
 import apiRouter from './routes'; // Import the centralized router
 import { unassignAdminsFromSites } from './modules/users/users.service';
+import { apiRateLimiter } from './middleware/rateLimit.middleware';
+import { notFoundHandler, errorHandler } from './middleware/error.middleware';
+import morgan from 'morgan';
 
 dotenv.config();
 
@@ -40,14 +43,19 @@ app.use(
 );
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
-
-// Single entry point for all API routes
-app.use('/api', apiRouter);
 
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
+
+// Single entry point for all API routes
+app.use('/api', apiRateLimiter, apiRouter);
+
+// Unmatched routes and centralized error handling (must be registered last)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 const startServer = async () => {
   try {

@@ -5,6 +5,11 @@ import axios from 'axios';
 
 export default function AuthContext({ children }: { children: ReactNode }) {
   useEffect(() => {
+    // Required so the browser sends/stores the httpOnly session cookie on
+    // cross-origin requests to the backend (frontend and backend run on
+    // different ports/origins in dev).
+    axios.defaults.withCredentials = true;
+
     const requestInterceptor = axios.interceptors.request.use((config) => {
       if (typeof window !== 'undefined') {
         const token = localStorage.getItem('token');

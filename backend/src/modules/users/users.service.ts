@@ -3,6 +3,21 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+// Every User read in this module must exclude the password hash.
+const USER_SAFE_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  phone: true,
+  avatarUrl: true,
+  role: true,
+  status: true,
+  siteId: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
 export const unassignAdminsFromSites = async () => {
   return await prisma.user.updateMany({
     where: {
@@ -42,6 +57,7 @@ export const createUser = async (data: any) => {
         status: data.status || 'ACTIVE',
         siteId: incomingRole === Role.ADMIN ? undefined : data.siteId || undefined,
       },
+      select: USER_SAFE_SELECT,
     });
   } catch (error: any) {
     if (error?.code === 'P2002') {
@@ -56,7 +72,8 @@ export const getAllUsers = async () => {
     where: {
       role: Role.GUARD,
     },
-    include: {
+    select: {
+      ...USER_SAFE_SELECT,
       managedSites: true,
       site: true, // Include assigned site
     },
@@ -67,7 +84,8 @@ export const getAllUsers = async () => {
 export const getUserById = async (id: string) => {
   return await prisma.user.findUnique({
     where: { id },
-    include: {
+    select: {
+      ...USER_SAFE_SELECT,
       managedSites: true,
       site: true, // Include assigned site
       incidents: {
@@ -120,6 +138,7 @@ export const updateUser = async (id: string, data: any, actingUser?: any) => {
       ...data,
       phone: data.phone,
     },
+    select: USER_SAFE_SELECT,
   });
 };
 

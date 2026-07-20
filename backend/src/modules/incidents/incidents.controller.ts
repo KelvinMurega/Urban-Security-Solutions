@@ -1,7 +1,20 @@
 import { Request, Response } from 'express';
 import * as IncidentService from './incidents.service';
-import { Role } from '@prisma/client';
+import { Role, IncidentSeverity, IncidentStatus } from '@prisma/client';
+import { z } from 'zod';
 
+const incidentCreateSchema = z.object({
+  title: z.string().min(2),
+  description: z.string().min(2),
+  severity: z.nativeEnum(IncidentSeverity).optional(),
+  siteId: z.string().min(1),
+  userId: z.string().min(1).optional(),
+});
+
+const incidentUpdateSchema = z.object({
+  status: z.nativeEnum(IncidentStatus).optional(),
+  resolutionDetails: z.string().optional(),
+});
 
 export class IncidentController {
 
@@ -13,10 +26,19 @@ export class IncidentController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
+      const parsed = incidentCreateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues });
+      }
+
       const payload = {
-        ...req.body,
-        userId: actor.role === Role.GUARD ? actor.id : req.body.userId
+        ...parsed.data,
+        userId: actor.role === Role.GUARD ? actor.id : parsed.data.userId
       };
+
+      if (!payload.userId) {
+        return res.status(400).json({ error: 'userId is required.' });
+      }
 
       const incident = await IncidentService.createIncident(payload);
       res.status(201).json(incident);
@@ -54,7 +76,12 @@ export class IncidentController {
         return res.status(403).json({ error: 'Only admins can resolve incidents.' });
       }
 
-      const incident = await IncidentService.updateIncident(req.params.id as string, req.body);
+      const parsed = incidentUpdateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues });
+      }
+
+      const incident = await IncidentService.updateIncident(req.params.id as string, parsed.data);
       res.json(incident);
     } catch (error: any) {
       res.status(400).json({ error: error.message });

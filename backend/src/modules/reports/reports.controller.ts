@@ -1,6 +1,13 @@
 import { Request, Response } from 'express';
 import * as ReportService from './reports.service';
 import { Role } from '@prisma/client';
+import { z } from 'zod';
+
+const reportCreateSchema = z.object({
+  content: z.string().min(1),
+  shiftId: z.string().min(1),
+  userId: z.string().min(1).optional(),
+});
 
 export class ReportController {
 
@@ -11,10 +18,19 @@ export class ReportController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
+      const parsed = reportCreateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues });
+      }
+
       const payload = {
-        ...req.body,
-        userId: actor.role === Role.GUARD ? actor.id : req.body.userId
+        ...parsed.data,
+        userId: actor.role === Role.GUARD ? actor.id : parsed.data.userId
       };
+
+      if (!payload.userId) {
+        return res.status(400).json({ error: 'userId is required.' });
+      }
 
       const report = await ReportService.createReport(payload);
       res.status(201).json(report);

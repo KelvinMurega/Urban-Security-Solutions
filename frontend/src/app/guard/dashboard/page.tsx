@@ -3,8 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import axios from "axios";
+import {
+  CalendarCheck,
+  CalendarDays,
+  AlertTriangle,
+  MapPin,
+  Clock,
+  ShieldAlert,
+  ClipboardList,
+  UserCircle,
+  ArrowRight,
+} from "lucide-react";
 import GuardLayout from "../../../components/GuardLayout";
 import { resolveApiUrl } from "../../../lib/api-url";
+import StatusBadge from "../../../components/ui/StatusBadge";
 
 type Shift = {
   id: string;
@@ -28,11 +40,19 @@ type StoredUser = {
   name: string;
 };
 
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+};
+
 export default function GuardDashboard() {
   const apiUrl = resolveApiUrl();
   const [user, setUser] = useState<StoredUser | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const userRaw = localStorage.getItem("user");
@@ -59,6 +79,8 @@ export default function GuardDashboard() {
         setIncidents(guardIncidents);
       } catch (error) {
         console.error("Failed to load guard dashboard data", error);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -85,98 +107,143 @@ export default function GuardDashboard() {
       .length;
   }, [shifts]);
 
+  const isToday = nextShift ? new Date(nextShift.startTime).toDateString() === new Date().toDateString() : false;
+
   return (
     <GuardLayout>
-      <div className="max-w-2xl mx-auto p-3 sm:p-4 space-y-6">
-        <div className="bg-white rounded-xl shadow border border-gray-200 p-4 sm:p-5">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-            Welcome, {user?.name?.split(" ")[0] || "Officer"}
+      <div className="max-w-2xl mx-auto space-y-5">
+        <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-indigo-600 to-indigo-800 p-5 text-white shadow-sm sm:p-6">
+          <p className="text-sm font-medium text-indigo-100">{getGreeting()},</p>
+          <h1 className="text-2xl font-bold sm:text-3xl">
+            {user?.name?.split(" ")[0] || "Officer"}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="mt-1 text-sm text-indigo-100">
             Here is your live assignment overview.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-            <p className="text-xs text-blue-700 font-semibold uppercase">
-              Scheduled
-            </p>
-            <p className="text-2xl font-bold text-blue-900 mt-1">
-              {shifts.length}
-            </p>
-          </div>
-          <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-4">
-            <p className="text-xs text-emerald-700 font-semibold uppercase">
-              This Week
-            </p>
-            <p className="text-2xl font-bold text-emerald-900 mt-1">
-              {thisWeekCount}
-            </p>
-          </div>
-          <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
-            <p className="text-xs text-amber-700 font-semibold uppercase">
-              Incidents Logged
-            </p>
-            <p className="text-2xl font-bold text-amber-900 mt-1">
-              {incidents.length}
-            </p>
-          </div>
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard
+            icon={CalendarCheck}
+            label="Scheduled"
+            value={shifts.length}
+            loading={loading}
+            tone="blue"
+          />
+          <StatCard
+            icon={CalendarDays}
+            label="This Week"
+            value={thisWeekCount}
+            loading={loading}
+            tone="emerald"
+          />
+          <StatCard
+            icon={AlertTriangle}
+            label="Incidents"
+            value={incidents.length}
+            loading={loading}
+            tone="amber"
+          />
         </div>
 
-        <div className="bg-white rounded-xl shadow border border-gray-200 p-4 sm:p-5">
-          <h2 className="font-bold text-gray-800 mb-2">Next Assignment</h2>
-          {nextShift ? (
-            <div className="text-sm text-gray-700 space-y-1">
-              <p>
-                <span className="font-semibold">Site:</span>{" "}
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-bold text-gray-800">Next Assignment</h2>
+            {nextShift && <StatusBadge label={isToday ? "Today" : "Upcoming"} tone={isToday ? "success" : "info"} />}
+          </div>
+          {loading ? (
+            <div className="animate-pulse space-y-2">
+              <div className="h-4 w-2/3 rounded bg-gray-100" />
+              <div className="h-4 w-1/2 rounded bg-gray-100" />
+            </div>
+          ) : nextShift ? (
+            <div className="space-y-2 text-sm text-gray-700">
+              <p className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 shrink-0 text-indigo-500" />
                 {nextShift.site?.name || "Unassigned site"}
               </p>
-              <p>
-                <span className="font-semibold">Start:</span>{" "}
+              <p className="flex items-center gap-2">
+                <Clock className="h-4 w-4 shrink-0 text-indigo-500" />
                 {new Date(nextShift.startTime).toLocaleString()}
-              </p>
-              <p>
-                <span className="font-semibold">End:</span>{" "}
-                {nextShift.endTime
-                  ? new Date(nextShift.endTime).toLocaleString()
-                  : "TBD"}
+                {" → "}
+                {nextShift.endTime ? new Date(nextShift.endTime).toLocaleString() : "TBD"}
               </p>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">
-              No upcoming assignment found.
-            </p>
+            <p className="text-sm text-gray-500">No upcoming assignment found.</p>
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Link
-            href="/guard/schedule"
-            className="bg-indigo-600 text-white rounded-lg p-4 text-center font-semibold hover:bg-indigo-700 transition"
-          >
-            View Schedule
-          </Link>
-          <Link
-            href="/guard/report"
-            className="bg-red-600 text-white rounded-lg p-4 text-center font-semibold hover:bg-red-700 transition"
-          >
-            File Report
-          </Link>
-          <Link
-            href="/guard/history"
-            className="bg-white border border-gray-200 rounded-lg p-4 text-center font-semibold text-gray-700 hover:bg-gray-50 transition"
-          >
-            My History
-          </Link>
-          <Link
-            href="/guard/profile"
-            className="bg-white border border-gray-200 rounded-lg p-4 text-center font-semibold text-gray-700 hover:bg-gray-50 transition"
-          >
-            My Profile
-          </Link>
+        <div className="grid grid-cols-2 gap-3">
+          <QuickAction href="/guard/schedule" icon={CalendarDays} label="View Schedule" tone="primary" />
+          <QuickAction href="/guard/report" icon={ShieldAlert} label="File Report" tone="danger" />
+          <QuickAction href="/guard/history" icon={ClipboardList} label="My History" tone="neutral" />
+          <QuickAction href="/guard/profile" icon={UserCircle} label="My Profile" tone="neutral" />
         </div>
       </div>
     </GuardLayout>
+  );
+}
+
+const statTones: Record<string, string> = {
+  blue: "bg-blue-50 border-blue-100 text-blue-700",
+  emerald: "bg-emerald-50 border-emerald-100 text-emerald-700",
+  amber: "bg-amber-50 border-amber-100 text-amber-700",
+};
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  loading,
+  tone,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  loading: boolean;
+  tone: "blue" | "emerald" | "amber";
+}) {
+  return (
+    <div className={`rounded-xl border p-3 sm:p-4 ${statTones[tone]}`}>
+      <Icon className="h-4 w-4" />
+      <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide sm:text-xs">{label}</p>
+      {loading ? (
+        <div className="mt-1.5 h-6 w-8 animate-pulse rounded bg-black/10" />
+      ) : (
+        <p className="mt-1 text-xl font-bold sm:text-2xl">{value}</p>
+      )}
+    </div>
+  );
+}
+
+const actionTones: Record<string, string> = {
+  primary: "bg-indigo-600 text-white hover:bg-indigo-700",
+  danger: "bg-rose-600 text-white hover:bg-rose-700",
+  neutral: "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50",
+};
+
+function QuickAction({
+  href,
+  icon: Icon,
+  label,
+  tone,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  tone: "primary" | "danger" | "neutral";
+}) {
+  return (
+    <Link
+      href={href}
+      className={`flex items-center justify-between rounded-xl p-4 font-semibold shadow-sm transition active:scale-[0.98] ${actionTones[tone]}`}
+    >
+      <span className="flex items-center gap-2 text-sm">
+        <Icon className="h-4 w-4" />
+        {label}
+      </span>
+      <ArrowRight className="h-4 w-4 opacity-60" />
+    </Link>
   );
 }

@@ -8,6 +8,9 @@ export const createSite = async (data: any) => {
       name: data.name,
       address: data.address,
       location: data.location,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      ...(data.geofenceRadiusMeters !== undefined && { geofenceRadiusMeters: data.geofenceRadiusMeters }),
       // If a managerId is provided, connect it
       ...(data.managerId && {
         manager: { connect: { id: data.managerId } }
@@ -32,13 +35,24 @@ export const getAllSites = async () => {
   });
 };
 
+const USER_PUBLIC_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  avatarUrl: true,
+  role: true,
+  status: true,
+  siteId: true,
+};
+
 export const getSiteById = async (id: string) => {
   return await prisma.site.findUnique({
     where: { id },
     include: {
-      manager: true,
+      manager: { select: USER_PUBLIC_SELECT },
       incidents: true,
-      users: true, // Include assigned guards
+      users: { select: USER_PUBLIC_SELECT }, // Include assigned guards
       shifts: {
         orderBy: { startTime: 'desc' },
         take: 5 // Last 5 shifts
@@ -54,6 +68,9 @@ export const updateSite = async (id: string, data: any) => {
         name: data.name,
         address: data.address,
         location: data.location,
+        ...(data.latitude !== undefined && { latitude: data.latitude }),
+        ...(data.longitude !== undefined && { longitude: data.longitude }),
+        ...(data.geofenceRadiusMeters !== undefined && { geofenceRadiusMeters: data.geofenceRadiusMeters }),
         // Only update manager if provided
         ...(data.managerId && {
             manager: { connect: { id: data.managerId } }

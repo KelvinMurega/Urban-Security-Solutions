@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { MapPin, Camera, Trash2, LogOut } from 'lucide-react';
 import GuardLayout from '../../../components/GuardLayout';
 import { resolveApiUrl } from '../../../lib/api-url';
 import { resolveAvatarUrl } from '../../../lib/avatar-url';
@@ -63,12 +64,18 @@ export default function GuardProfilePage() {
     window.dispatchEvent(new Event('profile:updated'));
   };
 
-  const handleLogout = () => {
-    if (confirm('Are you sure you want to log out?')) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/';
+  const handleLogout = async () => {
+    if (!confirm('Are you sure you want to log out?')) return;
+
+    try {
+      await axios.post(`${apiUrl}/api/auth/logout`);
+    } catch {
+      // Best-effort — proceed with clearing the local session regardless.
     }
+
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/';
   };
 
   useEffect(() => {
@@ -226,21 +233,26 @@ export default function GuardProfilePage() {
                 <StatusBadge label={guard?.role || 'GUARD'} tone="info" />
               </div>
 
-              <div className="mt-4 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Assigned Site</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{guard?.site?.name || 'Unassigned'}</p>
+              <div className="mt-4 flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left">
+                <MapPin className="h-4 w-4 shrink-0 text-gray-400" />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Assigned Site</p>
+                  <p className="text-sm font-semibold text-gray-900">{guard?.site?.name || 'Unassigned'}</p>
+                </div>
               </div>
 
               <div className="mt-5 w-full space-y-2">
-                <label className="block cursor-pointer rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">
+                  <Camera className="h-4 w-4" />
                   Upload Photo
                   <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
                 </label>
                 <button
                   type="button"
                   onClick={removeAvatar}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                 >
+                  <Trash2 className="h-4 w-4" />
                   Remove Photo
                 </button>
               </div>
@@ -335,8 +347,9 @@ export default function GuardProfilePage() {
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="w-full rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 font-semibold text-red-700 transition hover:bg-red-100 sm:w-auto"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 font-semibold text-red-700 transition hover:bg-red-100 sm:w-auto"
                   >
+                    <LogOut className="h-4 w-4" />
                     Log Out
                   </button>
                   <button

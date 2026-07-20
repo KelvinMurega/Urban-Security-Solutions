@@ -14,7 +14,9 @@ type AuthUser = { id: string; role: Role };
 
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const cookieToken = (req as Request & { cookies?: Record<string, string> }).cookies?.token || null;
+  const token = headerToken || cookieToken;
 
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized' });

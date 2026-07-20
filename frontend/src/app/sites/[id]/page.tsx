@@ -23,6 +23,9 @@ type Site = {
   name: string;
   address: string;
   location?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  geofenceRadiusMeters?: number;
   users: Guard[];
 };
 
@@ -35,13 +38,39 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const [site, setSite] = useState<Site | null>(null);
   const [allGuards, setAllGuards] = useState<Guard[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState<{ name: string; address: string; location: string }>({
+  const [editForm, setEditForm] = useState({
     name: '',
     address: '',
-    location: ''
+    location: '',
+    latitude: '',
+    longitude: '',
+    geofenceRadiusMeters: '150'
   });
   const [selectedGuardId, setSelectedGuardId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [locating, setLocating] = useState(false);
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation is not supported in this browser.', 'error');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setEditForm((prev) => ({
+          ...prev,
+          latitude: String(position.coords.latitude),
+          longitude: String(position.coords.longitude)
+        }));
+        setLocating(false);
+      },
+      () => {
+        showToast('Could not get your current location.', 'error');
+        setLocating(false);
+      }
+    );
+  };
 
   useEffect(() => {
     fetchData();
@@ -58,7 +87,10 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
       setEditForm({
         name: siteRes.data.name,
         address: siteRes.data.address,
-        location: siteRes.data.location || ''
+        location: siteRes.data.location || '',
+        latitude: siteRes.data.latitude != null ? String(siteRes.data.latitude) : '',
+        longitude: siteRes.data.longitude != null ? String(siteRes.data.longitude) : '',
+        geofenceRadiusMeters: String(siteRes.data.geofenceRadiusMeters ?? 150)
       });
     } catch (err) {
       console.error(err);
@@ -69,7 +101,14 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
   const handleUpdateSite = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.put(`${apiUrl}/api/sites/${id}`, editForm);
+      await axios.put(`${apiUrl}/api/sites/${id}`, {
+        name: editForm.name,
+        address: editForm.address,
+        location: editForm.location,
+        latitude: editForm.latitude ? Number(editForm.latitude) : undefined,
+        longitude: editForm.longitude ? Number(editForm.longitude) : undefined,
+        geofenceRadiusMeters: editForm.geofenceRadiusMeters ? Number(editForm.geofenceRadiusMeters) : undefined
+      });
       setIsEditing(false);
       fetchData();
       showToast('Site details updated.', 'success');
@@ -133,6 +172,11 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="mt-2 space-y-1 text-gray-600">
                   <p>Address: {site.address}</p>
                   <p>Location: {site.location || 'No location notes'}</p>
+                  <p>
+                    GPS: {site.latitude != null && site.longitude != null
+                      ? `${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)} (±${site.geofenceRadiusMeters ?? 150}m)`
+                      : 'Not set — check-in geofencing disabled for this site'}
+                  </p>
                 </div>
                 <div className="mt-4">
                   <StatusBadge label="Active Site" tone="success" />
@@ -172,6 +216,48 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
                   onChange={e => setEditForm({ ...editForm, location: e.target.value })}
                 />
               </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">GPS Coordinates (for check-in geofencing)</label>
+                  <button
+                    type="button"
+                    onClick={useCurrentLocation}
+                    disabled={locating}
+                    className="text-xs font-semibold text-blue-700 hover:text-blue-900"
+                  >
+                    {locating ? 'Locating...' : '📍 Use my location'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <input
+                    type="number"
+                    step="any"
+                    className="border p-2 rounded text-black"
+                    placeholder="Latitude"
+                    value={editForm.latitude}
+                    onChange={e => setEditForm({ ...editForm, latitude: e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    className="border p-2 rounded text-black"
+                    placeholder="Longitude"
+                    value={editForm.longitude}
+                    onChange={e => setEditForm({ ...editForm, longitude: e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    min="10"
+                    className="border p-2 rounded text-black"
+                    placeholder="Geofence radius (meters)"
+                    value={editForm.geofenceRadiusMeters}
+                    onChange={e => setEditForm({ ...editForm, geofenceRadiusMeters: e.target.value })}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Leave latitude/longitude blank to disable geofence enforcement.</p>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-2">
                 <button type="submit" className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save Changes</button>
                 <button type="button" onClick={() => setIsEditing(false)} className="w-full sm:w-auto bg-gray-300 text-gray-800 px-4 py-2 rounded">Cancel</button>

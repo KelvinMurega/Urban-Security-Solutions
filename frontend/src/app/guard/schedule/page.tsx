@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { MapPin, Clock, LogIn, LogOut, CalendarX, ArrowRightLeft } from 'lucide-react';
 import GuardLayout from '../../../components/GuardLayout';
 import { resolveApiUrl } from '../../../lib/api-url';
 import PageHeader from '../../../components/ui/PageHeader';
@@ -16,10 +17,22 @@ type Shift = {
   status: string;
   checkedInAt?: string | null;
   checkedOutAt?: string | null;
-  checkInFromGuardName?: string | null;
-  checkOutToGuardName?: string | null;
+  checkInFromUser?: { id: string; name: string } | null;
+  checkOutToUser?: { id: string; name: string } | null;
   workedHours?: number;
   site?: { name?: string };
+};
+
+const getCurrentPosition = (): Promise<GeolocationPosition> => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported on this device.'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, () => {
+      reject(new Error('Could not get your location. Enable location access and try again.'));
+    }, { enableHighAccuracy: true, timeout: 15000 });
+  });
 };
 
 type Guard = {
@@ -36,6 +49,7 @@ export default function GuardSchedulePage() {
   const [checkInSelection, setCheckInSelection] = useState<Record<string, string>>({});
   const [checkOutSelection, setCheckOutSelection] = useState<Record<string, string>>({});
   const [loadingShiftId, setLoadingShiftId] = useState<string>('');
+  const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -62,6 +76,8 @@ export default function GuardSchedulePage() {
         setGuards((guardRes.data as Guard[]).filter((guard) => guard.id !== user.id && guard.role === 'GUARD'));
       } catch (error) {
         console.error('Failed to load schedule', error);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -88,42 +104,48 @@ export default function GuardSchedulePage() {
   };
 
   const handleCheckIn = async (shiftId: string) => {
-    const previousGuardName = checkInSelection[shiftId];
-    if (!previousGuardName || !currentGuardId) {
-      showToast('Select the previous guard before check in.', 'error');
-      return;
-    }
+    if (!currentGuardId) return;
 
     try {
       setLoadingShiftId(shiftId);
-      await axios.put(`${apiUrl}/api/shifts/${shiftId}/check-in`, {
-        previousGuardName
+      const position = await getCurrentPosition();
+      const res = await axios.put(`${apiUrl}/api/shifts/${shiftId}/check-in`, {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        previousGuardId: checkInSelection[shiftId] || undefined
       });
-      showToast('Checked in successfully.', 'success');
+      const distance = res.data?.checkInDistanceMeters;
+      showToast(
+        typeof distance === 'number' ? `Checked in — ${distance}m from site.` : 'Checked in successfully.',
+        'success'
+      );
       await refreshShifts();
     } catch (error: any) {
-      showToast(error?.response?.data?.error || 'Check in failed.', 'error');
+      showToast(error?.response?.data?.error || error?.message || 'Check in failed.', 'error');
     } finally {
       setLoadingShiftId('');
     }
   };
 
   const handleCheckOut = async (shiftId: string) => {
-    const nextGuardName = checkOutSelection[shiftId];
-    if (!nextGuardName || !currentGuardId) {
-      showToast('Select the next guard before check out.', 'error');
-      return;
-    }
+    if (!currentGuardId) return;
 
     try {
       setLoadingShiftId(shiftId);
-      await axios.put(`${apiUrl}/api/shifts/${shiftId}/check-out`, {
-        nextGuardName
+      const position = await getCurrentPosition();
+      const res = await axios.put(`${apiUrl}/api/shifts/${shiftId}/check-out`, {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        nextGuardId: checkOutSelection[shiftId] || undefined
       });
-      showToast('Checked out successfully.', 'success');
+      const distance = res.data?.checkOutDistanceMeters;
+      showToast(
+        typeof distance === 'number' ? `Checked out — ${distance}m from site.` : 'Checked out successfully.',
+        'success'
+      );
       await refreshShifts();
     } catch (error: any) {
-      showToast(error?.response?.data?.error || 'Check out failed.', 'error');
+      showToast(error?.response?.data?.error || error?.message || 'Check out failed.', 'error');
     } finally {
       setLoadingShiftId('');
     }
@@ -136,41 +158,72 @@ export default function GuardSchedulePage() {
     return 'info';
   };
 
+  const statusAccent: Record<string, string> = {
+    ACTIVE: 'border-l-emerald-500',
+    COMPLETED: 'border-l-gray-300',
+    CANCELLED: 'border-l-rose-400',
+    SCHEDULED: 'border-l-indigo-400',
+  };
+
   const renderShift = (shift: Shift) => (
-    <div key={shift.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-      <p className="text-sm font-semibold text-indigo-700">{shift.site?.name || 'Unassigned Site'}</p>
-      <p className="text-sm text-gray-700 mt-1">{new Date(shift.startTime).toLocaleString()}</p>
-      <p className="text-xs text-gray-500 mt-1">
-        End: {shift.endTime ? new Date(shift.endTime).toLocaleString() : 'TBD'}
-      </p>
-      {shift.checkedInAt && (
-        <p className="text-xs text-gray-600 mt-1">
-          Checked in: {new Date(shift.checkedInAt).toLocaleString()} {shift.checkInFromGuardName ? `(handover from: ${shift.checkInFromGuardName})` : ''}
-        </p>
-      )}
-      {shift.checkedOutAt && (
-        <p className="text-xs text-gray-600 mt-1">
-          Checked out: {new Date(shift.checkedOutAt).toLocaleString()} {shift.checkOutToGuardName ? `(handover to: ${shift.checkOutToGuardName})` : ''}
-        </p>
-      )}
-      <p className="text-xs font-semibold text-gray-700 mt-2">
-        Hours worked: {typeof shift.workedHours === 'number' ? shift.workedHours.toFixed(2) : '0.00'}h
-      </p>
-      <div className="mt-3">
+    <div
+      key={shift.id}
+      className={`rounded-xl border border-gray-200 border-l-4 bg-white p-4 shadow-sm ${statusAccent[shift.status] || 'border-l-indigo-400'}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-indigo-700">
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            {shift.site?.name || 'Unassigned Site'}
+          </p>
+          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-gray-700">
+            <Clock className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+            {new Date(shift.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+          </p>
+          <p className="mt-0.5 pl-5 text-xs text-gray-500">
+            until {shift.endTime ? new Date(shift.endTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'TBD'}
+          </p>
+        </div>
         <StatusBadge label={shift.status} tone={getStatusTone(shift.status)} />
       </div>
 
+      {(shift.checkedInAt || shift.checkedOutAt) && (
+        <div className="mt-3 space-y-1 rounded-lg bg-gray-50 p-2.5 text-xs text-gray-600">
+          {shift.checkedInAt && (
+            <p className="flex items-center gap-1.5">
+              <LogIn className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              In: {new Date(shift.checkedInAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+              {shift.checkInFromUser ? ` · from ${shift.checkInFromUser.name}` : ''}
+            </p>
+          )}
+          {shift.checkedOutAt && (
+            <p className="flex items-center gap-1.5">
+              <LogOut className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+              Out: {new Date(shift.checkedOutAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+              {shift.checkOutToUser ? ` · to ${shift.checkOutToUser.name}` : ''}
+            </p>
+          )}
+        </div>
+      )}
+
+      <p className="mt-2 text-xs font-semibold text-gray-700">
+        Hours worked: {typeof shift.workedHours === 'number' ? shift.workedHours.toFixed(2) : '0.00'}h
+      </p>
+
       {!shift.checkedInAt && (
-        <div className="mt-3 space-y-2">
-          <label className="block text-xs text-gray-600">Guard before you (handover from)</label>
+        <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <ArrowRightLeft className="h-3 w-3" />
+            Guard before you (handover from) — optional
+          </label>
           <select
-            className="w-full border p-2 rounded text-black text-sm"
+            className="w-full rounded-lg border border-gray-300 p-2.5 text-base text-black sm:text-sm"
             value={checkInSelection[shift.id] || ''}
             onChange={(e) => setCheckInSelection((prev) => ({ ...prev, [shift.id]: e.target.value }))}
           >
-            <option value="">Select previous guard</option>
+            <option value="">No handover / not applicable</option>
             {guards.map((guard) => (
-              <option key={guard.id} value={guard.name}>
+              <option key={guard.id} value={guard.id}>
                 {guard.name}
               </option>
             ))}
@@ -178,24 +231,28 @@ export default function GuardSchedulePage() {
           <button
             onClick={() => handleCheckIn(shift.id)}
             disabled={loadingShiftId === shift.id}
-            className="w-full bg-emerald-600 text-white py-2 rounded text-sm font-semibold hover:bg-emerald-700 transition"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-60"
           >
-            {loadingShiftId === shift.id ? 'Checking in...' : 'Check In'}
+            <LogIn className="h-4 w-4" />
+            {loadingShiftId === shift.id ? 'Getting location...' : 'Check In'}
           </button>
         </div>
       )}
 
       {shift.checkedInAt && !shift.checkedOutAt && (
-        <div className="mt-3 space-y-2">
-          <label className="block text-xs text-gray-600">Guard after you (handover to)</label>
+        <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <ArrowRightLeft className="h-3 w-3" />
+            Guard after you (handover to) — optional
+          </label>
           <select
-            className="w-full border p-2 rounded text-black text-sm"
+            className="w-full rounded-lg border border-gray-300 p-2.5 text-base text-black sm:text-sm"
             value={checkOutSelection[shift.id] || ''}
             onChange={(e) => setCheckOutSelection((prev) => ({ ...prev, [shift.id]: e.target.value }))}
           >
-            <option value="">Select next guard</option>
+            <option value="">No handover / not applicable</option>
             {guards.map((guard) => (
-              <option key={guard.id} value={guard.name}>
+              <option key={guard.id} value={guard.id}>
                 {guard.name}
               </option>
             ))}
@@ -203,27 +260,41 @@ export default function GuardSchedulePage() {
           <button
             onClick={() => handleCheckOut(shift.id)}
             disabled={loadingShiftId === shift.id}
-            className="w-full bg-rose-600 text-white py-2 rounded text-sm font-semibold hover:bg-rose-700 transition"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-rose-600 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 active:scale-[0.99] disabled:opacity-60"
           >
-            {loadingShiftId === shift.id ? 'Checking out...' : 'Check Out'}
+            <LogOut className="h-4 w-4" />
+            {loadingShiftId === shift.id ? 'Getting location...' : 'Check Out'}
           </button>
         </div>
       )}
     </div>
   );
 
+  const skeletonCard = (key: number) => (
+    <div key={key} className="animate-pulse rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="h-4 w-1/2 rounded bg-gray-100" />
+      <div className="mt-2 h-3 w-1/3 rounded bg-gray-100" />
+      <div className="mt-4 h-8 w-full rounded bg-gray-100" />
+    </div>
+  );
+
   return (
     <GuardLayout>
-      <div className="max-w-2xl mx-auto p-3 sm:p-4 space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6">
         <PageHeader
           title="My Schedule"
           subtitle="Check in, check out, and track your worked hours."
         />
 
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Upcoming</h2>
-          {upcomingShifts.length === 0 ? (
-            <div className="bg-white border border-dashed border-gray-300 rounded-lg p-4 text-sm text-gray-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            Upcoming {!loading && upcomingShifts.length > 0 && `(${upcomingShifts.length})`}
+          </h2>
+          {loading ? (
+            <div className="space-y-3">{[0, 1].map(skeletonCard)}</div>
+          ) : upcomingShifts.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
+              <CalendarX className="h-6 w-6 text-gray-300" />
               No upcoming shifts assigned.
             </div>
           ) : (
@@ -232,9 +303,14 @@ export default function GuardSchedulePage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Past</h2>
-          {pastShifts.length === 0 ? (
-            <div className="bg-white border border-dashed border-gray-300 rounded-lg p-4 text-sm text-gray-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            Past {!loading && pastShifts.length > 0 && `(${pastShifts.length})`}
+          </h2>
+          {loading ? (
+            <div className="space-y-3">{[0].map(skeletonCard)}</div>
+          ) : pastShifts.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
+              <CalendarX className="h-6 w-6 text-gray-300" />
               No shift history yet.
             </div>
           ) : (

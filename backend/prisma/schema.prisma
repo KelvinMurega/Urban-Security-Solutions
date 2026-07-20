@@ -54,6 +54,8 @@ model User {
   assignedShifts Shift[]
   incidents      Incident[]
   reports        Report[]
+  shiftHandoverIns  Shift[] @relation("ShiftCheckInFrom")
+  shiftHandoverOuts Shift[] @relation("ShiftCheckOutTo")
 
   // Assignment: Each guard can be assigned to one site
   siteId   String?   // Foreign key to Site
@@ -70,7 +72,10 @@ model Site {
   name        String
   address     String
   location    String?
-  
+  latitude    Float?
+  longitude   Float?
+  geofenceRadiusMeters Int @default(150)
+
   // Relations
   managerId   String?
   manager     User?    @relation("SiteManager", fields: [managerId], references: [id])
@@ -110,15 +115,22 @@ model Shift {
   status      ShiftStatus @default(SCHEDULED)
   checkedInAt DateTime?
   checkedOutAt DateTime?
-  checkInFromGuardName String?
-  checkOutToGuardName String?
-  
+  checkInLat  Float?
+  checkInLng  Float?
+  checkOutLat Float?
+  checkOutLng Float?
+
   // Relations
   userId      String
   user        User        @relation(fields: [userId], references: [id])
   siteId      String
   site        Site        @relation(fields: [siteId], references: [id])
   reports     Report[]
+
+  checkInFromUserId String?
+  checkInFromUser   User?   @relation("ShiftCheckInFrom", fields: [checkInFromUserId], references: [id])
+  checkOutToUserId  String?
+  checkOutToUser    User?   @relation("ShiftCheckOutTo", fields: [checkOutToUserId], references: [id])
 
   // Audit Fields
   createdAt   DateTime @default(now())

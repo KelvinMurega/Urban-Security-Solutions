@@ -32,7 +32,7 @@ export const getIncidentById = async (id: string) => {
   return await prisma.incident.findUnique({
     where: { id },
     include: {
-      user: true,
+      user: { select: { id: true, name: true, email: true, role: true } },
       site: true,
     },
   });

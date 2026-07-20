@@ -6,6 +6,9 @@ const siteSchema = z.object({
   name: z.string().min(2),
   address: z.string().min(2),
   location: z.string().optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  geofenceRadiusMeters: z.number().int().positive().optional(),
   managerId: z.string().optional(),
 });
 
@@ -13,6 +16,9 @@ const siteUpdateSchema = z.object({
   name: z.string().min(2).optional(),
   address: z.string().min(2).optional(),
   location: z.string().optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  geofenceRadiusMeters: z.number().int().positive().optional(),
   managerId: z.string().optional(),
 });
 

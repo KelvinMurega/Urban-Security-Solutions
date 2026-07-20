@@ -10,16 +10,27 @@ const profileUpdateSchema = z.object({
   avatarUrl: z.string().optional(),
 });
 
+const AUTH_COOKIE_NAME = 'token';
+
+const authCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  domain: process.env.COOKIE_DOMAIN || undefined,
+  path: '/',
+  maxAge: 24 * 60 * 60 * 1000, // matches the 24h JWT expiry
+});
+
 export class AuthController {
-  
+
   // LOGIN METHOD
   static async login(req: Request, res: Response) {
     try {
       const { email, password } = req.body;
-      
+
       // 1. Verify User credentials
       const user = await AuthService.validateUser(email, password);
-      
+
       if (!user) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
@@ -27,21 +38,31 @@ export class AuthController {
       // 2. GENERATE TOKEN (This was likely missing or failing)
       const token = AuthService.generateToken(user);
 
-      // 3. Send BOTH user and token
-      res.json({ 
-        token, 
+      // 3. Set an httpOnly cookie so server-side middleware can verify the session,
+      // in addition to returning the token for the existing localStorage-based flow.
+      res.cookie(AUTH_COOKIE_NAME, token, authCookieOptions());
+
+      // 4. Send BOTH user and token
+      res.json({
+        token,
         user: {
           id: user.id,
           name: user.name,
           email: user.email,
           role: user.role,
           avatarUrl: (user as { avatarUrl?: string | null }).avatarUrl || null
-        } 
+        }
       });
 
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  }
+
+  // LOGOUT METHOD
+  static async logout(req: Request, res: Response) {
+    res.clearCookie(AUTH_COOKIE_NAME, { ...authCookieOptions(), maxAge: undefined });
+    res.status(200).json({ success: true });
   }
 
   // REGISTER METHOD (Optional, for creating the first admin)

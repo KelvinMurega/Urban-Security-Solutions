@@ -1,6 +1,14 @@
 import { PrismaClient } from '@prisma/client';
+import { distanceMeters } from '../../shared/geo';
 
 const prisma = new PrismaClient();
+
+const HANDOVER_INCLUDE = {
+  user: { select: { name: true, email: true } },
+  site: { select: { name: true } },
+  checkInFromUser: { select: { id: true, name: true } },
+  checkOutToUser: { select: { id: true, name: true } },
+};
 
 export class ShiftService {
   private static withWorkedHours<T extends { checkedInAt: Date | null; checkedOutAt: Date | null }>(shift: T) {
@@ -35,20 +43,14 @@ export class ShiftService {
         endTime: end,
         status: 'SCHEDULED' // Default status
       },
-      include: {
-        user: true, // Return the guard's name
-        site: true  // Return the site's name
-      }
+      include: HANDOVER_INCLUDE
     });
   }
 
   // 2. Get All Shifts (Sorted by newest)
   static async getAllShifts() {
     const shifts = await prisma.shift.findMany({
-      include: {
-        user: { select: { name: true, email: true } },
-        site: { select: { name: true } }
-      },
+      include: HANDOVER_INCLUDE,
       orderBy: { startTime: 'desc' }
     });
 
@@ -58,18 +60,40 @@ export class ShiftService {
   static async getShiftsByUser(userId: string) {
     const shifts = await prisma.shift.findMany({
       where: { userId },
-      include: {
-        user: { select: { name: true, email: true } },
-        site: { select: { name: true } }
-      },
+      include: HANDOVER_INCLUDE,
       orderBy: { startTime: 'desc' }
     });
 
     return shifts.map((shift) => this.withWorkedHours(shift));
   }
 
-  static async checkInShift(shiftId: string, guardId: string, previousGuardName: string) {
-    const shift = await prisma.shift.findUnique({ where: { id: shiftId } });
+  // Enforces the site's geofence when both the site and the submitted position have
+  // coordinates; returns the distance (or null when no geofence could be evaluated).
+  private static enforceGeofence(
+    site: { latitude: number | null; longitude: number | null; geofenceRadiusMeters: number; name: string },
+    lat: number,
+    lng: number
+  ) {
+    if (site.latitude === null || site.longitude === null) {
+      return null;
+    }
+
+    const distance = distanceMeters(site.latitude, site.longitude, lat, lng);
+    if (distance > site.geofenceRadiusMeters) {
+      throw new Error(
+        `You are ${Math.round(distance)}m from ${site.name}. You must be within ${site.geofenceRadiusMeters}m to do this.`
+      );
+    }
+
+    return distance;
+  }
+
+  static async checkInShift(
+    shiftId: string,
+    guardId: string,
+    { lat, lng, previousGuardId }: { lat: number; lng: number; previousGuardId?: string }
+  ) {
+    const shift = await prisma.shift.findUnique({ where: { id: shiftId }, include: { site: true } });
     if (!shift) {
       throw new Error('Shift not found.');
     }
@@ -80,24 +104,29 @@ export class ShiftService {
       throw new Error('Shift is already checked in.');
     }
 
+    const distance = this.enforceGeofence(shift.site, lat, lng);
+
     const updated = await prisma.shift.update({
       where: { id: shiftId },
       data: {
         checkedInAt: new Date(),
-        checkInFromGuardName: previousGuardName,
+        checkInLat: lat,
+        checkInLng: lng,
+        checkInFromUserId: previousGuardId || null,
         status: 'ACTIVE'
       },
-      include: {
-        user: { select: { name: true, email: true } },
-        site: { select: { name: true } }
-      }
+      include: HANDOVER_INCLUDE
     });
 
-    return this.withWorkedHours(updated);
+    return { ...this.withWorkedHours(updated), checkInDistanceMeters: distance !== null ? Math.round(distance) : null };
   }
 
-  static async checkOutShift(shiftId: string, guardId: string, nextGuardName: string) {
-    const shift = await prisma.shift.findUnique({ where: { id: shiftId } });
+  static async checkOutShift(
+    shiftId: string,
+    guardId: string,
+    { lat, lng, nextGuardId }: { lat: number; lng: number; nextGuardId?: string }
+  ) {
+    const shift = await prisma.shift.findUnique({ where: { id: shiftId }, include: { site: true } });
     if (!shift) {
       throw new Error('Shift not found.');
     }
@@ -111,19 +140,20 @@ export class ShiftService {
       throw new Error('Shift is already checked out.');
     }
 
+    const distance = this.enforceGeofence(shift.site, lat, lng);
+
     const updated = await prisma.shift.update({
       where: { id: shiftId },
       data: {
         checkedOutAt: new Date(),
-        checkOutToGuardName: nextGuardName,
+        checkOutLat: lat,
+        checkOutLng: lng,
+        checkOutToUserId: nextGuardId || null,
         status: 'COMPLETED'
       },
-      include: {
-        user: { select: { name: true, email: true } },
-        site: { select: { name: true } }
-      }
+      include: HANDOVER_INCLUDE
     });
 
-    return this.withWorkedHours(updated);
+    return { ...this.withWorkedHours(updated), checkOutDistanceMeters: distance !== null ? Math.round(distance) : null };
   }
 }

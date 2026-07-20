@@ -62,7 +62,7 @@ export class AuthService {
   // 1. Validate User (Check password)
   static async validateUser(email: string, pass: string) {
     const inputEmail = String(email || '').trim();
-    const rawPassword = String(pass || '');
+    const rawPassword = String(pass || '').trim();
 
     let user = await prisma.user.findUnique({ where: { email: inputEmail } });
 
@@ -74,22 +74,9 @@ export class AuthService {
 
     if (!user) return null;
 
-    // Check if password matches (using bcrypt)
-    let isValid = await bcrypt.compare(rawPassword, user.password);
-    
-    // Fallback: If your database has old plain-text passwords (from early testing)
-    // this check handles that so you don't get locked out.
-    if (!isValid && rawPassword === user.password) return user;
-
-    // Handle accidental spaces pasted into password fields.
-    if (!isValid && rawPassword.trim() !== rawPassword) {
-      const trimmedPassword = rawPassword.trim();
-      isValid = await bcrypt.compare(trimmedPassword, user.password);
-      if (!isValid && trimmedPassword === user.password) return user;
-    }
-
+    const isValid = await bcrypt.compare(rawPassword, user.password);
     if (!isValid) return null;
-    
+
     return user;
   }
 
@@ -118,7 +105,15 @@ export class AuthService {
         password: hashedPassword,
         role: Role.ADMIN,
         siteId: null
-      }
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        avatarUrl: true,
+        role: true,
+      },
     });
   }
 

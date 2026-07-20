@@ -18,8 +18,38 @@ export default function SitesPage() {
   
   // MODAL STATE
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newSite, setNewSite] = useState({ name: '', address: '', location: '' });
+  const [newSite, setNewSite] = useState({
+    name: '',
+    address: '',
+    location: '',
+    latitude: '',
+    longitude: '',
+    geofenceRadiusMeters: '150'
+  });
   const [loading, setLoading] = useState(false);
+  const [locating, setLocating] = useState(false);
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation is not supported in this browser.', 'error');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setNewSite((prev) => ({
+          ...prev,
+          latitude: String(position.coords.latitude),
+          longitude: String(position.coords.longitude)
+        }));
+        setLocating(false);
+      },
+      () => {
+        showToast('Could not get your current location.', 'error');
+        setLocating(false);
+      }
+    );
+  };
 
   // 1. Fetch Sites
   const fetchSites = async () => {
@@ -41,11 +71,18 @@ export default function SitesPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post(`${apiUrl}/api/sites`, newSite);
-      
+      await axios.post(`${apiUrl}/api/sites`, {
+        name: newSite.name,
+        address: newSite.address,
+        location: newSite.location,
+        latitude: newSite.latitude ? Number(newSite.latitude) : undefined,
+        longitude: newSite.longitude ? Number(newSite.longitude) : undefined,
+        geofenceRadiusMeters: newSite.geofenceRadiusMeters ? Number(newSite.geofenceRadiusMeters) : undefined
+      });
+
       // Success: Close modal, reset form, refresh list
       setShowCreateModal(false);
-      setNewSite({ name: '', address: '', location: '' });
+      setNewSite({ name: '', address: '', location: '', latitude: '', longitude: '', geofenceRadiusMeters: '150' });
       fetchSites();
       showToast('Site created successfully.', 'success');
     } catch (err) {
@@ -142,12 +179,56 @@ export default function SitesPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Location Notes</label>
-                  <input 
-                    placeholder="e.g. Near west gate" 
+                  <input
+                    placeholder="e.g. Near west gate"
                     className="w-full border p-2 rounded text-black focus:ring-2 focus:ring-blue-500 outline-none"
                     value={newSite.location}
                     onChange={e => setNewSite({...newSite, location: e.target.value})}
                     required
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">GPS Coordinates (for check-in geofencing)</label>
+                    <button
+                      type="button"
+                      onClick={useCurrentLocation}
+                      disabled={locating}
+                      className="text-xs font-semibold text-blue-700 hover:text-blue-900"
+                    >
+                      {locating ? 'Locating...' : '📍 Use my location'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Latitude"
+                      className="w-full border p-2 rounded text-black focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={newSite.latitude}
+                      onChange={e => setNewSite({...newSite, latitude: e.target.value})}
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Longitude"
+                      className="w-full border p-2 rounded text-black focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={newSite.longitude}
+                      onChange={e => setNewSite({...newSite, longitude: e.target.value})}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Leave blank to skip geofence enforcement for this site.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Geofence Radius (meters)</label>
+                  <input
+                    type="number"
+                    min="10"
+                    className="w-full border p-2 rounded text-black focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={newSite.geofenceRadiusMeters}
+                    onChange={e => setNewSite({...newSite, geofenceRadiusMeters: e.target.value})}
                   />
                 </div>
 
