@@ -9,6 +9,7 @@ const incidentCreateSchema = z.object({
   severity: z.nativeEnum(IncidentSeverity).optional(),
   siteId: z.string().min(1),
   userId: z.string().min(1).optional(),
+  photos: z.array(z.string()).max(4).optional(),
 });
 
 const incidentUpdateSchema = z.object({

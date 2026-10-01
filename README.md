@@ -44,10 +44,13 @@ backend/
     server.ts        Express app entry point
 frontend/
   src/
-    app/             Next.js App Router pages — admin routes at the root, guard routes under /guard
-    components/       AdminLayout, GuardLayout, shared UI (PageHeader, StatusBadge, ToastProvider)
+    app/             Next.js App Router pages — admin routes at the root, guard routes under /guard, client routes under /client
+    components/       AdminLayout, GuardLayout, ClientLayout, shared UI components
     lib/              API URL resolution, avatar URL helpers
     middleware.ts     server-side route/role enforcement
+urban-security-solutions/
+  index.html          Standalone client-facing company website
+  server.js           Static site server and client-login redirect
 ```
 
 ## Getting Started
@@ -88,8 +91,19 @@ JWT_SECRET="<same value as backend/.env>"
 ```
 
 ```bash
-npm run dev   # starts on http://localhost:3000
+npm run dev   # starts on http://localhost:3005
 ```
+
+### 3. Client-facing website
+
+```bash
+cd urban-security-solutions
+npm run dev   # starts on http://localhost:3006
+```
+
+The website's **Client login** link redirects to the client sign-in page at `http://localhost:3005/client/login` by default. Set `CLIENT_PORTAL_URL` on the website server when the application runs at a different URL.
+
+An admin creates client accounts and assigns their sites from **Clients** in the admin navigation. Clients sign in with the main application login and are routed to `/client/dashboard`; they can see attendance, shift hours, incidents, guard reports, and invoices for their assigned sites only. Admins issue and update invoices from **Invoices**. Set each invoice's three-letter currency code explicitly. There is no public client registration or client self-payment flow.
 
 ## Environment Variables
 
@@ -116,11 +130,12 @@ npm run dev   # starts on http://localhost:3000
 
 Defined in `backend/prisma/schema.prisma`:
 
-- **User** — `ADMIN` or `GUARD`, optionally assigned to a `Site`
+- **User** — `ADMIN`, `GUARD`, or `CLIENT`; guards are assigned to a `Site`, while clients are linked to sites through `ClientSite`
 - **Site** — name, address, optional GPS coordinates + geofence radius (meters)
 - **Shift** — scheduled window, check-in/out timestamps and GPS coordinates, guard handover links
 - **Incident** — severity (`LOW`/`MEDIUM`/`HIGH`/`CRITICAL`), status, resolution notes
 - **Report** — a guard's daily log entry, tied to a shift
+- **Invoice** — admin-issued client bill with amount, currency, due date, status, and optional site
 
 ## Security Notes
 

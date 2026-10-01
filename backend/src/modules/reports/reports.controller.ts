@@ -7,6 +7,7 @@ const reportCreateSchema = z.object({
   content: z.string().min(1),
   shiftId: z.string().min(1),
   userId: z.string().min(1).optional(),
+  photos: z.array(z.string()).max(4).optional(),
 });
 
 export class ReportController {

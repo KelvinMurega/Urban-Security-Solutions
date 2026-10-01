@@ -1,15 +1,24 @@
 import { PrismaClient, IncidentSeverity } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { persistImageDataUrls } from '../../shared/uploads';
 
 const prisma = new PrismaClient();
 
 export const createIncident = async (data: any) => {
+  const id = randomUUID();
+  const photoUrls = data.photos?.length
+    ? await persistImageDataUrls('incidents', id, data.photos)
+    : undefined;
+
   return await prisma.incident.create({
     data: {
+      id,
       title: data.title,
       description: data.description,
       // Default to MEDIUM if invalid
       severity: (data.severity as IncidentSeverity) || IncidentSeverity.MEDIUM,
       status: 'OPEN',
+      photoUrls,
       user: { connect: { id: data.userId } },
       site: { connect: { id: data.siteId } },
     },

@@ -36,6 +36,8 @@ export default function LoginPage() {
         }
         if (user?.role === 'GUARD') {
           router.push('/guard/dashboard');
+        } else if (user?.role === 'CLIENT') {
+          router.push('/client/dashboard');
         } else {
           router.push('/dashboard');
         }

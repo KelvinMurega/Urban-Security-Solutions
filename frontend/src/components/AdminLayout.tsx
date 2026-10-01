@@ -12,6 +12,8 @@ import {
   CalendarDays,
   TriangleAlert,
   ClipboardList,
+  UsersRound,
+  ReceiptText,
   Menu,
   X,
   ChevronLeft,
@@ -51,6 +53,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const parsedUser = JSON.parse(user) as { id?: string; name?: string; role?: string };
       if (parsedUser.role === 'GUARD') {
         router.push('/guard/dashboard');
+        return;
+      }
+      if (parsedUser.role === 'CLIENT') {
+        router.push('/client/dashboard');
         return;
       }
       setUserName(parsedUser.name || 'Admin');
@@ -130,6 +136,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Schedule', href: '/shifts', icon: CalendarDays },
     { name: 'Incidents', href: '/incidents', icon: TriangleAlert },
     { name: 'Daily Logs', href: '/reports', icon: ClipboardList },
+    { name: 'Clients', href: '/clients', icon: UsersRound },
+    { name: 'Invoices', href: '/invoices', icon: ReceiptText },
   ];
 
   const navLinks = navItems.map((item) => (

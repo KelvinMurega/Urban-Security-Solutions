@@ -6,6 +6,7 @@ import { ShieldAlert, ClipboardList, CalendarClock } from 'lucide-react';
 import GuardLayout from '../../../components/GuardLayout';
 import { resolveApiUrl } from '../../../lib/api-url';
 import { useToast } from '../../../components/ui/ToastProvider';
+import PhotoPicker from '../../../components/ui/PhotoPicker';
 
 type Shift = {
   id: string;
@@ -38,11 +39,13 @@ export default function GuardReportPage() {
     severity: 'MEDIUM' as Severity,
     shiftId: ''
   });
+  const [incidentPhotos, setIncidentPhotos] = useState<string[]>([]);
 
   const [logForm, setLogForm] = useState({
     content: '',
     shiftId: ''
   });
+  const [logPhotos, setLogPhotos] = useState<string[]>([]);
 
   useEffect(() => {
     const userRaw = localStorage.getItem('user');
@@ -89,10 +92,12 @@ export default function GuardReportPage() {
         description: incidentForm.description,
         severity: incidentForm.severity,
         userId: guardId,
-        siteId: selectedShift.siteId
+        siteId: selectedShift.siteId,
+        photos: incidentPhotos
       });
 
       setIncidentForm((prev) => ({ ...prev, title: '', description: '', severity: 'MEDIUM' }));
+      setIncidentPhotos([]);
       showToast('Incident submitted successfully.', 'success');
     } catch (error: any) {
       showToast(error?.response?.data?.error || 'Failed to submit incident.', 'error');
@@ -110,9 +115,11 @@ export default function GuardReportPage() {
       await axios.post(`${apiUrl}/api/reports`, {
         content: logForm.content,
         userId: guardId,
-        shiftId: logForm.shiftId
+        shiftId: logForm.shiftId,
+        photos: logPhotos
       });
       setLogForm((prev) => ({ ...prev, content: '' }));
+      setLogPhotos([]);
       showToast('Daily log submitted successfully.', 'success');
     } catch (error: any) {
       showToast(error?.response?.data?.error || 'Failed to submit daily log.', 'error');
@@ -222,6 +229,11 @@ export default function GuardReportPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600">Evidence Photos (optional)</label>
+                <PhotoPicker value={incidentPhotos} onChange={setIncidentPhotos} />
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -247,6 +259,11 @@ export default function GuardReportPage() {
                   onChange={(e) => setLogForm((prev) => ({ ...prev, content: e.target.value }))}
                   required
                 />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600">Photos (optional)</label>
+                <PhotoPicker value={logPhotos} onChange={setLogPhotos} />
               </div>
 
               <button
