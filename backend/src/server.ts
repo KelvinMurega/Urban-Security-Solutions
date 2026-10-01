@@ -41,7 +41,9 @@ app.use(
     credentials: true
   })
 );
-app.use(express.json({ limit: '5mb' }));
+// 15mb accommodates up to 4 base64-encoded photo attachments (2MB raw each) on
+// incident/report submissions, plus the existing avatar upload path.
+app.use(express.json({ limit: '15mb' }));
 app.use(cookieParser());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

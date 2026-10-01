@@ -5,6 +5,7 @@ import axios from 'axios';
 import { ShieldAlert, ClipboardList, Inbox } from 'lucide-react';
 import GuardLayout from '../../../components/GuardLayout';
 import { resolveApiUrl } from '../../../lib/api-url';
+import PhotoGallery from '../../../components/ui/PhotoGallery';
 
 type Incident = {
   id: string;
@@ -14,6 +15,7 @@ type Incident = {
   severity: string;
   createdAt: string;
   site?: { name?: string };
+  photoUrls?: unknown;
 };
 
 type Report = {
@@ -22,6 +24,7 @@ type Report = {
   shiftId?: string;
   createdAt: string;
   shift?: { userId?: string };
+  photoUrls?: unknown;
 };
 
 type Shift = {
@@ -84,7 +87,8 @@ export default function GuardHistoryPage() {
       description: incident.description,
       severity: incident.severity,
       meta: incident.site?.name || 'Unknown Site',
-      createdAt: incident.createdAt
+      createdAt: incident.createdAt,
+      photoUrls: incident.photoUrls
     }));
 
     const reportItems = reports.map((report) => ({
@@ -94,7 +98,8 @@ export default function GuardHistoryPage() {
       description: report.content,
       severity: undefined,
       meta: shifts.find((shift) => shift.id === report.shiftId)?.site?.name || 'Unknown Site',
-      createdAt: report.createdAt
+      createdAt: report.createdAt,
+      photoUrls: report.photoUrls
     }));
 
     return [...incidentItems, ...reportItems].sort(
@@ -183,6 +188,7 @@ export default function GuardHistoryPage() {
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-gray-700">{item.description}</p>
+                <PhotoGallery urls={item.photoUrls} />
                 <p className="mt-3 text-xs text-gray-400">{new Date(item.createdAt).toLocaleString()}</p>
               </div>
             ))}

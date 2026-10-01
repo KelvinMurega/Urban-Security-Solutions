@@ -44,7 +44,7 @@ export default function GuardLayout({ children }: { children: React.ReactNode })
     try {
       const user = JSON.parse(userStr) as { role?: string; name?: string; id?: string; avatarUrl?: string | null };
       if (user.role && user.role !== 'GUARD') {
-        router.push('/dashboard');
+        router.push(user.role === 'CLIENT' ? '/client/dashboard' : '/dashboard');
         return;
       }
 

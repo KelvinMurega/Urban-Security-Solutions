@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { persistImageDataUrls } from '../../shared/uploads';
 
 const prisma = new PrismaClient();
 
@@ -16,9 +18,16 @@ export const createReport = async (data: any) => {
     throw new Error('You can only submit logs for your own shifts.');
   }
 
+  const id = randomUUID();
+  const photoUrls = data.photos?.length
+    ? await persistImageDataUrls('reports', id, data.photos)
+    : undefined;
+
   return await prisma.report.create({
     data: {
+      id,
       content: data.content,
+      photoUrls,
       user: { connect: { id: data.userId } },
       shift: { connect: { id: shift.id } },
     },

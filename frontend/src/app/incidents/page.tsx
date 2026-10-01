@@ -8,6 +8,8 @@ import { resolveApiUrl } from '../../lib/api-url';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { useToast } from '../../components/ui/ToastProvider';
+import PhotoPicker from '../../components/ui/PhotoPicker';
+import PhotoGallery from '../../components/ui/PhotoGallery';
 
 // --- Data Interfaces ---
 interface Site {
@@ -32,6 +34,7 @@ interface Incident {
   userId: string;
   site?: Site;
   user?: Guard;
+  photoUrls?: unknown;
 }
 
 export default function IncidentsPage() {
@@ -53,6 +56,7 @@ export default function IncidentsPage() {
   const [form, setForm] = useState({
     title: '', description: '', severity: 'LOW', userId: '', siteId: ''
   });
+  const [photos, setPhotos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   // FIX: Date State to prevent Hydration Error
@@ -86,8 +90,9 @@ export default function IncidentsPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post(`${apiUrl}/api/incidents`, form);
+      await axios.post(`${apiUrl}/api/incidents`, { ...form, photos });
       setForm({ title: '', description: '', severity: 'LOW', userId: '', siteId: '' });
+      setPhotos([]);
       setShowLogModal(false);
       fetchData();
       showToast('Incident logged.', 'success');
@@ -198,6 +203,8 @@ export default function IncidentsPage() {
                         <span className="text-green-900">{inc.resolutionDetails}</span>
                       </div>
                     )}
+
+                    <PhotoGallery urls={inc.photoUrls} />
 
                     <div className="mt-3 text-xs text-gray-400 flex flex-wrap gap-4">
                       <span>📍 {inc.site?.name}</span>
@@ -330,6 +337,10 @@ export default function IncidentsPage() {
                   <option value="HIGH">High</option>
                   <option value="CRITICAL">Critical</option>
                 </select>
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-gray-700">Evidence Photos (optional)</label>
+                  <PhotoPicker value={photos} onChange={setPhotos} />
+                </div>
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <button type="button" onClick={() => setShowLogModal(false)} className="flex-1 bg-gray-200 text-gray-900 py-2 rounded">Cancel</button>
                   <button type="submit" disabled={loading} className="flex-1 bg-red-700 text-white py-2 rounded">{loading ? 'Saving...' : 'Log Incident'}</button>

@@ -3,11 +3,13 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import AdminLayout from '../../components/AdminLayout'; 
+import AdminLayout from '../../components/AdminLayout';
 import { resolveApiUrl } from '../../lib/api-url';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { useToast } from '../../components/ui/ToastProvider';
+import PhotoPicker from '../../components/ui/PhotoPicker';
+import PhotoGallery from '../../components/ui/PhotoGallery';
 
 export default function ReportsPage() {
   const apiUrl = resolveApiUrl();
@@ -20,6 +22,7 @@ export default function ReportsPage() {
   
   // Form State
   const [form, setForm] = useState({ content: '', userId: '', shiftId: '' });
+  const [photos, setPhotos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   // 1. Fetch Data
@@ -53,10 +56,11 @@ export default function ReportsPage() {
 
     setLoading(true);
     try {
-      await axios.post(`${apiUrl}/api/reports`, form);
-      
+      await axios.post(`${apiUrl}/api/reports`, { ...form, photos });
+
       // Reset form and refresh list
       setForm({ content: '', userId: '', shiftId: '' });
+      setPhotos([]);
       fetchData();
       showToast('Report submitted.', 'success');
     } catch (err) {
@@ -125,7 +129,12 @@ export default function ReportsPage() {
                 <StatusBadge label={guards.find((g) => g.id === form.userId)?.name || 'Select shift first'} tone="info" />
               </div>
 
-              <button 
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Photos (optional)</label>
+                <PhotoPicker value={photos} onChange={setPhotos} />
+              </div>
+
+              <button
                 type="submit" 
                 disabled={loading}
                 className="w-full bg-teal-600 text-white py-2 rounded hover:bg-teal-700 font-bold shadow transition"
@@ -163,6 +172,7 @@ export default function ReportsPage() {
                   <p className="text-gray-800 leading-relaxed border-l-2 border-gray-200 pl-3">
                     {report.content}
                   </p>
+                  <PhotoGallery urls={report.photoUrls} />
                 </div>
               ))
             )}

@@ -32,3 +32,6 @@ backend/uploads/
 
 # TypeScript build cache
 *.tsbuildinfo
+
+# Backend build output
+backend/dist/

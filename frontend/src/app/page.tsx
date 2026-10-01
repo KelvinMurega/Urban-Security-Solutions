@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import Link from 'next/link';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { resolveApiUrl } from '../lib/api-url';
@@ -40,6 +41,8 @@ export default function LoginPage() {
 
       if (userData.role === 'GUARD') {
         router.push('/guard/dashboard');
+      } else if (userData.role === 'CLIENT') {
+        router.push('/client/dashboard');
       } else {
         router.push('/dashboard');
       }
@@ -142,6 +145,9 @@ export default function LoginPage() {
                 {loading ? 'Verifying...' : 'Sign In'}
               </button>
             </form>
+            <p className="mt-6 text-center text-xs text-slate-600">
+              Client account? <Link href="/client/login" className="font-semibold text-slate-900 underline underline-offset-4">Sign in to the client portal</Link>
+            </p>
           </div>
         </div>
       </div>
