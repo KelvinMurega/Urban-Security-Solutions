@@ -1,59 +1,71 @@
+import { env } from './config/env'; // must be first: validates configuration and fails closed
 import express, { Request, Response } from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import morgan from 'morgan';
 import { networkInterfaces, NetworkInterfaceInfo } from 'os';
-import path from 'path';
-import apiRouter from './routes'; // Import the centralized router
+import apiRouter from './routes';
+import filesRouter from './modules/files/files.routes';
+import { isAllowedOrigin } from './config/origins';
 import { unassignAdminsFromSites } from './modules/users/users.service';
 import { apiRateLimiter } from './middleware/rateLimit.middleware';
+import { csrfProtection } from './middleware/csrf.middleware';
 import { notFoundHandler, errorHandler } from './middleware/error.middleware';
-import morgan from 'morgan';
-
-dotenv.config();
+import { prisma } from './shared/prisma';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-const HOST = process.env.HOST || '0.0.0.0';
 
-const allowedOrigins = new Set(
-  (process.env.CORS_ORIGINS || '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean)
+// Behind a load balancer / reverse proxy, trust exactly that many hops so req.ip (used by
+// rate limiting and security logs) is the real client and cannot be spoofed via headers.
+app.set('trust proxy', env.TRUST_PROXY);
+app.disable('x-powered-by');
+
+app.use(
+  helmet({
+    // This is a JSON API: deny everything a browser could render or embed.
+    contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    hsts: env.isProduction ? { maxAge: 31536000, includeSubDomains: true } : false,
+    referrerPolicy: { policy: 'no-referrer' },
+  })
 );
 
-const isPrivateNetworkOrigin = (origin: string) =>
-  /^https?:\/\/(localhost|127\.0\.0\.1|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(:\d+)?$/i.test(origin);
-
-// Global Middleware
-app.use(helmet());
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.has(origin) || isPrivateNetworkOrigin(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(new Error(`Origin not allowed by CORS: ${origin}`));
+      // No Origin = same-origin or non-browser client; CSRF middleware covers unsafe methods.
+      if (!origin || isAllowedOrigin(origin)) return callback(null, true);
+      return callback(null, false);
     },
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 600,
   })
 );
-// 15mb accommodates up to 4 base64-encoded photo attachments (2MB raw each) on
-// incident/report submissions, plus the existing avatar upload path.
-app.use(express.json({ limit: '15mb' }));
-app.use(cookieParser());
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-app.get('/health', (req: Request, res: Response) => {
-  res.status(200).json({ status: 'OK', message: 'Server is running' });
+// Small JSON bodies by default; only the endpoints that accept photos get a larger limit
+// (4 photos x 2MB, base64-encoded). body-parser skips bodies that were already parsed.
+const photoBody = express.json({ limit: '12mb' });
+app.use(['/api/incidents', '/api/reports', '/api/auth/me'], photoBody);
+app.use(express.json({ limit: '100kb' }));
+app.use(cookieParser());
+app.use(morgan(env.isProduction ? 'combined' : 'dev'));
+
+app.get('/health', async (_req: Request, res: Response) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ status: 'OK' });
+  } catch {
+    res.status(503).json({ status: 'UNAVAILABLE' });
+  }
 });
 
-// Single entry point for all API routes
-app.use('/api', apiRateLimiter, apiRouter);
+// Uploaded evidence is served only through an authenticated, authorized route.
+app.use('/uploads', filesRouter);
+
+app.use('/api', apiRateLimiter, csrfProtection, apiRouter);
 
 // Unmatched routes and centralized error handling (must be registered last)
 app.use(notFoundHandler);
@@ -69,22 +81,27 @@ const startServer = async () => {
     console.error('Failed to normalize admin site assignments:', error);
   }
 
-  app.listen(Number(PORT), HOST, () => {
-    const interfaces = networkInterfaces();
-    const localIps = Object.values(interfaces)
-      .reduce<NetworkInterfaceInfo[]>((all, ifaceList) => {
-        if (!ifaceList) return all;
-        all.push(...ifaceList);
-        return all;
-      }, [])
-      .filter((iface) => iface.family === 'IPv4' && !iface.internal)
-      .map((iface) => iface.address);
-
-    console.log(`Server is running on http://${HOST}:${PORT}`);
-    if (localIps.length > 0) {
-      console.log(`LAN access: http://${localIps[0]}:${PORT}`);
+  const server = app.listen(env.PORT, env.HOST, () => {
+    console.log(`Server is running on http://${env.HOST}:${env.PORT} (${env.NODE_ENV} mode)`);
+    if (!env.isProduction) {
+      const localIps = Object.values(networkInterfaces())
+        .reduce<NetworkInterfaceInfo[]>((all, ifaceList) => (ifaceList ? all.concat(ifaceList) : all), [])
+        .filter((iface) => iface.family === 'IPv4' && !iface.internal)
+        .map((iface) => iface.address);
+      if (localIps.length > 0) console.log(`LAN access: http://${localIps[0]}:${env.PORT}`);
     }
   });
+
+  const shutdown = (signal: string) => {
+    console.log(`${signal} received, shutting down...`);
+    server.close(async () => {
+      await prisma.$disconnect();
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10_000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 };
 
 startServer();

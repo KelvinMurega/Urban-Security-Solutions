@@ -2,24 +2,25 @@ import { Request, Response } from 'express';
 import { Role } from '@prisma/client';
 import { ShiftService } from './shifts.service';
 import { z } from 'zod';
+import { sendError } from '../../shared/http-error';
 
 const shiftCreateSchema = z.object({
-  userId: z.string().min(1),
-  siteId: z.string().min(1),
-  startTime: z.string().min(1),
-  endTime: z.string().min(1),
+  userId: z.string().min(1).max(64),
+  siteId: z.string().min(1).max(64),
+  startTime: z.string().min(1).max(40),
+  endTime: z.string().min(1).max(40),
 });
 
 const checkInSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
-  previousGuardId: z.string().min(1).optional(),
+  previousGuardId: z.string().min(1).max(64).optional(),
 });
 
 const checkOutSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
-  nextGuardId: z.string().min(1).optional(),
+  nextGuardId: z.string().min(1).max(64).optional(),
 });
 
 export class ShiftController {
@@ -41,8 +42,8 @@ export class ShiftController {
 
       const shift = await ShiftService.createShift(parsed.data);
       res.status(201).json(shift);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
@@ -58,8 +59,8 @@ export class ShiftController {
           ? await ShiftService.getAllShifts()
           : await ShiftService.getShiftsByUser(actor.id);
       res.json(shifts);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
@@ -81,8 +82,8 @@ export class ShiftController {
         parsed.data
       );
       res.json(shift);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
@@ -104,8 +105,8 @@ export class ShiftController {
         parsed.data
       );
       res.json(shift);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 }

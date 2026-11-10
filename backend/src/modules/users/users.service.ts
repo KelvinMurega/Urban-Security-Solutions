@@ -1,9 +1,10 @@
-import { PrismaClient, Role } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import { Prisma, Role, UserStatus } from '@prisma/client';
+import { prisma } from '../../shared/prisma';
+import { badRequest, conflict, forbidden, notFound } from '../../shared/http-error';
+import { hashPassword, normalizeEmail } from '../../shared/password';
+import { securityLog } from '../../shared/security-log';
 
-const prisma = new PrismaClient();
-
-// Every User read in this module must exclude the password hash.
+// Every User read in this module must exclude secrets (password hash, tokenVersion, lockout state).
 const USER_SAFE_SELECT = {
   id: true,
   email: true,
@@ -14,150 +15,165 @@ const USER_SAFE_SELECT = {
   status: true,
   siteId: true,
   isActive: true,
+  lastLoginAt: true,
   createdAt: true,
   updatedAt: true,
+} satisfies Prisma.UserSelect;
+
+
+type CreateUserInput = {
+  email: string;
+  password: string;
+  name: string;
+  phone: string;
+  role?: 'ADMIN' | 'GUARD';
+  siteId?: string;
+};
+
+type UpdateUserInput = Partial<CreateUserInput> & { status?: 'ACTIVE' | 'INACTIVE' };
+
+const assertSiteExists = async (siteId: string) => {
+  const site = await prisma.site.findUnique({ where: { id: siteId }, select: { id: true } });
+  if (!site) throw badRequest('Selected site does not exist.');
 };
 
 export const unassignAdminsFromSites = async () => {
-  return await prisma.user.updateMany({
-    where: {
-      role: Role.ADMIN,
-      siteId: { not: null }
-    },
-    data: {
-      siteId: null
-    }
+  return prisma.user.updateMany({
+    where: { role: Role.ADMIN, siteId: { not: null } },
+    data: { siteId: null },
   });
 };
 
-export const createUser = async (data: any) => {
-  const normalizedEmail = String(data.email || '').trim().toLowerCase();
-  const incomingRole: Role = (data.role as Role) || Role.GUARD;
+export const createUser = async (data: CreateUserInput, actorId: string) => {
+  const role: Role = data.role === 'ADMIN' ? Role.ADMIN : Role.GUARD; // least privilege default
 
-  // Prevent more than one admin
-  if (incomingRole === Role.ADMIN) {
-    const existingAdmin = await prisma.user.findFirst({ where: { role: Role.ADMIN } });
-    if (existingAdmin) {
-      throw new Error('Only one admin is allowed.');
-    }
-    if (data.siteId) {
-      throw new Error('Admin cannot be assigned to a site.');
-    }
+  if (role === Role.ADMIN) {
+    const existingAdmin = await prisma.user.findFirst({ where: { role: Role.ADMIN }, select: { id: true } });
+    if (existingAdmin) throw conflict('Only one admin is allowed.');
+    if (data.siteId) throw badRequest('Admin cannot be assigned to a site.');
   }
-  const hashedPassword = await bcrypt.hash(data.password, 10);
+  if (data.siteId) await assertSiteExists(data.siteId);
 
   try {
-    return await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
-        email: normalizedEmail,
-        password: hashedPassword,
+        email: normalizeEmail(data.email),
+        password: await hashPassword(data.password),
+        passwordChangedAt: new Date(),
         name: data.name,
         phone: data.phone,
-        role: incomingRole,
-        status: data.status || 'ACTIVE',
-        siteId: incomingRole === Role.ADMIN ? undefined : data.siteId || undefined,
+        role,
+        status: UserStatus.ACTIVE,
+        siteId: role === Role.ADMIN ? null : data.siteId || null,
       },
       select: USER_SAFE_SELECT,
     });
+    securityLog('account.created', { actorId, userId: user.id, role });
+    return user;
   } catch (error: any) {
-    if (error?.code === 'P2002') {
-      throw new Error('A user with this email already exists.');
-    }
+    if (error?.code === 'P2002') throw conflict('A user with this email already exists.');
     throw error;
   }
 };
 
 export const getAllUsers = async () => {
-  return await prisma.user.findMany({
-    where: {
-      role: Role.GUARD,
-    },
+  return prisma.user.findMany({
+    where: { role: Role.GUARD },
     select: {
       ...USER_SAFE_SELECT,
       managedSites: true,
-      site: true, // Include assigned site
+      site: true,
     },
-    orderBy: { createdAt: 'desc' }
+    orderBy: { createdAt: 'desc' },
   });
 };
 
 export const getUserById = async (id: string) => {
-  return await prisma.user.findUnique({
+  return prisma.user.findUnique({
     where: { id },
     select: {
       ...USER_SAFE_SELECT,
       managedSites: true,
-      site: true, // Include assigned site
-      incidents: {
-        orderBy: { createdAt: 'desc' }
-      },
-      reports: {
-        orderBy: { createdAt: 'desc' }
-      },
+      site: true,
+      incidents: { orderBy: { createdAt: 'desc' } },
+      reports: { orderBy: { createdAt: 'desc' } },
     },
   });
 };
 
-export const updateUser = async (id: string, data: any, actingUser?: any) => {
-  const existingUser = await prisma.user.findUnique({
-    where: { id },
-    select: { role: true }
-  });
+export const updateUser = async (id: string, data: UpdateUserInput, actor: { id: string; role: Role }) => {
+  const existingUser = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true, email: true } });
+  if (!existingUser) throw notFound('User not found.');
 
-  if (!existingUser) {
-    throw new Error('User not found.');
+  // Client accounts are managed through the clients module only.
+  if (existingUser.role === Role.CLIENT) throw forbidden('Client accounts are managed from the Clients page.');
+
+  // Prevent an admin from locking themselves out or demoting the only admin.
+  if (id === actor.id) {
+    if (data.role !== undefined && data.role !== existingUser.role) throw badRequest('You cannot change your own role.');
+    if (data.status === 'INACTIVE') throw badRequest('You cannot deactivate your own account.');
+    // Own password changes must go through PUT /api/auth/me, which re-verifies the current password.
+    if (data.password) throw badRequest('Change your own password from your profile page.');
   }
 
-  if (data.role !== undefined) {
-    if (!actingUser || actingUser.role !== Role.ADMIN) {
-      throw new Error('Only admin can change user roles.');
-    }
-    // Prevent more than one admin
-    if (data.role === 'ADMIN' || data.role === Role.ADMIN) {
-      const existingAdmin = await prisma.user.findFirst({ where: { role: Role.ADMIN, NOT: { id } } });
-      if (existingAdmin) {
-        throw new Error('Only one admin is allowed.');
-      }
-    }
+  if (data.role === 'ADMIN' && existingUser.role !== Role.ADMIN) {
+    const existingAdmin = await prisma.user.findFirst({ where: { role: Role.ADMIN, NOT: { id } }, select: { id: true } });
+    if (existingAdmin) throw conflict('Only one admin is allowed.');
   }
 
-  const resultingRole: Role = (data.role as Role) || existingUser.role;
+  const resultingRole: Role = data.role ? (data.role as Role) : existingUser.role;
+  const updateData: Prisma.UserUncheckedUpdateInput = {};
+
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.phone !== undefined) updateData.phone = data.phone;
+  if (data.email !== undefined) updateData.email = normalizeEmail(data.email);
+  if (data.role !== undefined) updateData.role = resultingRole;
+  if (data.status !== undefined) {
+    updateData.status = data.status as UserStatus;
+    updateData.isActive = data.status === 'ACTIVE';
+  }
+
   if (resultingRole === Role.ADMIN) {
-    if (data.siteId !== undefined && data.siteId !== null && data.siteId !== '') {
-      throw new Error('Admin cannot be assigned to a site.');
-    }
-    data.siteId = null;
+    if (data.siteId) throw badRequest('Admin cannot be assigned to a site.');
+    updateData.siteId = null;
+  } else if (data.siteId !== undefined) {
+    if (data.siteId) await assertSiteExists(data.siteId);
+    updateData.siteId = data.siteId || null;
   }
 
+  // Any change to credentials, privileges or account state revokes existing sessions.
+  const emailChanged = data.email !== undefined && normalizeEmail(data.email) !== existingUser.email;
+  const roleChanged = data.role !== undefined && data.role !== existingUser.role;
+  const revokesSessions = Boolean(data.password) || roleChanged || data.status === 'INACTIVE' || emailChanged;
   if (data.password) {
-    data.password = await bcrypt.hash(data.password, 10);
+    updateData.password = await hashPassword(data.password);
+    updateData.passwordChangedAt = new Date();
+    updateData.failedLoginAttempts = 0;
+    updateData.lockedUntil = null;
   }
-  return await prisma.user.update({
-    where: { id },
-    data: {
-      ...data,
-      phone: data.phone,
-    },
-    select: USER_SAFE_SELECT,
-  });
+  if (revokesSessions) updateData.tokenVersion = { increment: 1 };
+
+  try {
+    const user = await prisma.user.update({ where: { id }, data: updateData, select: USER_SAFE_SELECT });
+    securityLog('account.updated', {
+      actorId: actor.id,
+      userId: id,
+      fields: Object.keys(data).filter((key) => key !== 'password').concat(data.password ? ['password'] : []),
+    });
+    return user;
+  } catch (error: any) {
+    if (error?.code === 'P2002') throw conflict('A user with this email already exists.');
+    throw error;
+  }
 };
 
-export const deleteUser = async (id: string) => {
-  return await prisma.user.update({
+export const deactivateUser = async (id: string, actorId: string) => {
+  if (id === actorId) throw badRequest('You cannot deactivate your own account.');
+  const user = await prisma.user.update({
     where: { id },
-    data: { isActive: false },
+    data: { isActive: false, status: UserStatus.INACTIVE, tokenVersion: { increment: 1 } },
+    select: { id: true },
   });
-};
-
-export const login = async (data: any) => {
-  const user = await prisma.user.findUnique({
-    where: { email: data.email },
-  });
-
-  if (!user || !(await bcrypt.compare(data.password, user.password))) {
-    throw new Error('Invalid email or password');
-  }
-
-  const { password, ...userWithoutPassword } = user;
-  return userWithoutPassword;
+  securityLog('account.updated', { actorId, userId: id, fields: ['status'] });
+  return user;
 };

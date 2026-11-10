@@ -1,7 +1,19 @@
-import { PrismaClient } from '@prisma/client';
+import { Role, UserStatus } from '@prisma/client';
 import { distanceMeters } from '../../shared/geo';
+import { prisma } from '../../shared/prisma';
+import { badRequest, forbidden, notFound } from '../../shared/http-error';
 
-const prisma = new PrismaClient();
+const MAX_SHIFT_HOURS = 24;
+
+// Handover partners must be real, active guards other than the caller.
+const assertHandoverGuard = async (guardId: string | undefined, selfId: string) => {
+  if (!guardId) return;
+  if (guardId === selfId) throw badRequest('You cannot hand over to yourself.');
+  const guard = await prisma.user.findUnique({ where: { id: guardId }, select: { role: true, status: true, isActive: true } });
+  if (!guard || guard.role !== Role.GUARD || guard.status !== UserStatus.ACTIVE || !guard.isActive) {
+    throw badRequest('Handover guard is not an active guard.');
+  }
+};
 
 const HANDOVER_INCLUDE = {
   user: { select: { name: true, email: true } },
@@ -31,9 +43,24 @@ export class ShiftService {
     const start = new Date(data.startTime);
     const end = new Date(data.endTime);
 
-    if (end <= start) {
-      throw new Error('End time must be after start time');
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      throw badRequest('Valid start and end times are required.');
     }
+    if (end <= start) {
+      throw badRequest('End time must be after start time');
+    }
+    if (end.getTime() - start.getTime() > MAX_SHIFT_HOURS * 3_600_000) {
+      throw badRequest(`A shift cannot be longer than ${MAX_SHIFT_HOURS} hours.`);
+    }
+
+    const [guard, site] = await Promise.all([
+      prisma.user.findUnique({ where: { id: data.userId }, select: { role: true, status: true, isActive: true } }),
+      prisma.site.findUnique({ where: { id: data.siteId }, select: { id: true } }),
+    ]);
+    if (!guard || guard.role !== Role.GUARD || guard.status !== UserStatus.ACTIVE || !guard.isActive) {
+      throw badRequest('Shifts can only be assigned to active guards.');
+    }
+    if (!site) throw badRequest('Selected site does not exist.');
 
     return await prisma.shift.create({
       data: {
@@ -80,7 +107,7 @@ export class ShiftService {
 
     const distance = distanceMeters(site.latitude, site.longitude, lat, lng);
     if (distance > site.geofenceRadiusMeters) {
-      throw new Error(
+      throw badRequest(
         `You are ${Math.round(distance)}m from ${site.name}. You must be within ${site.geofenceRadiusMeters}m to do this.`
       );
     }
@@ -95,14 +122,18 @@ export class ShiftService {
   ) {
     const shift = await prisma.shift.findUnique({ where: { id: shiftId }, include: { site: true } });
     if (!shift) {
-      throw new Error('Shift not found.');
+      throw notFound('Shift not found.');
     }
     if (shift.userId !== guardId) {
-      throw new Error('You can only check in to your own shift.');
+      throw forbidden('You can only check in to your own shift.');
     }
     if (shift.checkedInAt) {
-      throw new Error('Shift is already checked in.');
+      throw badRequest('Shift is already checked in.');
     }
+    if (shift.status === 'CANCELLED') {
+      throw badRequest('This shift has been cancelled.');
+    }
+    await assertHandoverGuard(previousGuardId, guardId);
 
     const distance = this.enforceGeofence(shift.site, lat, lng);
 
@@ -128,17 +159,18 @@ export class ShiftService {
   ) {
     const shift = await prisma.shift.findUnique({ where: { id: shiftId }, include: { site: true } });
     if (!shift) {
-      throw new Error('Shift not found.');
+      throw notFound('Shift not found.');
     }
     if (shift.userId !== guardId) {
-      throw new Error('You can only check out of your own shift.');
+      throw forbidden('You can only check out of your own shift.');
     }
     if (!shift.checkedInAt) {
-      throw new Error('You must check in before checking out.');
+      throw badRequest('You must check in before checking out.');
     }
     if (shift.checkedOutAt) {
-      throw new Error('Shift is already checked out.');
+      throw badRequest('Shift is already checked out.');
     }
+    await assertHandoverGuard(nextGuardId, guardId);
 
     const distance = this.enforceGeofence(shift.site, lat, lng);
 

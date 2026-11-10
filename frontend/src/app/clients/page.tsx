@@ -105,7 +105,7 @@ export default function ClientsPage() {
             <form onSubmit={createClient} className="space-y-4">
               <Field label="Client name"><input className={inputClass} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required minLength={2} /></Field>
               <Field label="Email"><input className={inputClass} type="email" autoComplete="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></Field>
-              <Field label="Temporary password"><input className={inputClass} type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /><span className="mt-1 block text-[11px] text-gray-500">Share the initial password securely.</span></Field>
+              <Field label="Temporary password"><input className={inputClass} type="password" autoComplete="new-password" minLength={10} maxLength={72} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /><span className="mt-1 block text-[11px] text-gray-500">Share the initial password securely.</span></Field>
               <Field label="Phone (optional)"><input className={inputClass} type="tel" autoComplete="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></Field>
               <button className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#17231f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#30443b] disabled:opacity-60" disabled={savingClient}>{savingClient ? 'Creating…' : 'Create client'}</button>
             </form>

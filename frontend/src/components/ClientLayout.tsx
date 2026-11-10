@@ -21,9 +21,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // Display details only; the httpOnly session cookie is enforced by middleware + API.
     const storedUser = localStorage.getItem('user');
-    if (!token || !storedUser) {
+    if (!storedUser) {
       router.replace('/');
       return;
     }

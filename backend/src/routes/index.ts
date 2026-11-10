@@ -13,16 +13,17 @@ import { Role } from '@prisma/client';
 
 const router = Router();
 
-// Centralized Route Registration
+// Centralized Route Registration. Deny by default: every module below /auth requires an
+// authenticated session AND an explicit role allow-list at the mount point.
 // Prefixing all module routes here keeps them organized under /api
 router.use('/auth', authRoutes);
 router.use('/users', requireAuth, requireRole(Role.ADMIN), userRoutes);
 router.use('/sites', requireAuth, requireRole(Role.ADMIN), siteRoutes);
 router.use('/incidents', requireAuth, requireRole(Role.ADMIN, Role.GUARD), incidentRoutes);
-router.use('/shifts', requireAuth, shiftRoutes);
+router.use('/shifts', requireAuth, requireRole(Role.ADMIN, Role.GUARD), shiftRoutes);
 router.use('/reports', requireAuth, requireRole(Role.ADMIN, Role.GUARD), reportRoutes);
 router.use('/clients', requireAuth, requireRole(Role.ADMIN), clientRoutes);
 router.use('/client', requireAuth, requireRole(Role.CLIENT), clientPortalRoutes);
-router.use('/invoices', requireAuth, invoiceRoutes);
+router.use('/invoices', requireAuth, requireRole(Role.ADMIN, Role.CLIENT), invoiceRoutes);
 
 export default router;

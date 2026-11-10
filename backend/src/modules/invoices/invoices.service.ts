@@ -1,7 +1,7 @@
-import { InvoiceStatus, PrismaClient, Role } from '@prisma/client';
+import { InvoiceStatus, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../shared/prisma';
+import { badRequest, notFound } from '../../shared/http-error';
 
 const invoiceInclude = {
   client: { select: { id: true, name: true, email: true } },
@@ -44,17 +44,17 @@ export const createInvoice = async (data: {
     where: { id: data.clientId },
     select: { id: true, role: true },
   });
-  if (!client || client.role !== Role.CLIENT) throw new Error('Client not found.');
+  if (!client || client.role !== Role.CLIENT) throw notFound('Client not found.');
 
   const dueDate = new Date(data.dueDate);
-  if (Number.isNaN(dueDate.getTime())) throw new Error('A valid due date is required.');
+  if (Number.isNaN(dueDate.getTime())) throw badRequest('A valid due date is required.');
 
   if (data.siteId) {
     const assignment = await prisma.clientSite.findUnique({
       where: { clientId_siteId: { clientId: data.clientId, siteId: data.siteId } },
       select: { clientId: true },
     });
-    if (!assignment) throw new Error('The selected site is not assigned to this client.');
+    if (!assignment) throw badRequest('The selected site is not assigned to this client.');
   }
 
   const invoice = await prisma.invoice.create({

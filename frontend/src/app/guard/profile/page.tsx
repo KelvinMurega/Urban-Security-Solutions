@@ -23,6 +23,7 @@ type GuardProfile = {
 type ProfileForm = {
   name: string;
   phone: string;
+  currentPassword: string;
   password: string;
   confirmPassword: string;
 };
@@ -41,6 +42,7 @@ export default function GuardProfilePage() {
   const [form, setForm] = useState<ProfileForm>({
     name: '',
     phone: '',
+    currentPassword: '',
     password: '',
     confirmPassword: ''
   });
@@ -89,6 +91,7 @@ export default function GuardProfilePage() {
         setForm({
           name: res.data.name || '',
           phone: res.data.phone || '',
+          currentPassword: '',
           password: '',
           confirmPassword: ''
         });
@@ -176,8 +179,13 @@ export default function GuardProfilePage() {
     e.preventDefault();
     if (!guard) return;
 
-    if (form.password && form.password.length < 6) {
-      showToast('Password must be at least 6 characters.', 'error');
+    if (form.password && form.password.length < 10) {
+      showToast('Password must be at least 10 characters.', 'error');
+      return;
+    }
+
+    if (form.password && !form.currentPassword) {
+      showToast('Enter your current password to set a new one.', 'error');
       return;
     }
 
@@ -189,12 +197,13 @@ export default function GuardProfilePage() {
     setLoading(true);
 
     try {
-      const payload: { name: string; phone: string; password?: string } = {
+      const payload: { name: string; phone: string; currentPassword?: string; password?: string } = {
         name: form.name.trim(),
         phone: form.phone.trim()
       };
 
       if (form.password) {
+        payload.currentPassword = form.currentPassword;
         payload.password = form.password;
       }
 
@@ -202,11 +211,14 @@ export default function GuardProfilePage() {
       setGuard(res.data);
       syncSessionUser(res.data);
 
-      setForm((prev) => ({ ...prev, password: '', confirmPassword: '' }));
+      setForm((prev) => ({ ...prev, currentPassword: '', password: '', confirmPassword: '' }));
       showToast('Profile updated successfully.', 'success');
     } catch (error) {
       console.error(error);
-      showToast('Failed to update profile.', 'error');
+      const message = axios.isAxiosError(error) && typeof error.response?.data?.error === 'string'
+        ? error.response.data.error
+        : 'Failed to update profile.';
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -297,6 +309,18 @@ export default function GuardProfilePage() {
 
               <div className="border-t border-gray-200 pt-4">
                 <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-900">Security</h3>
+
+                <div className="mb-4">
+                  <label className="mb-1 block text-sm font-semibold text-gray-700">Current Password</label>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    className="w-full rounded-lg border border-gray-300 p-3 text-black outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    value={form.currentPassword}
+                    onChange={(e) => setForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                    placeholder="Required to set a new password"
+                  />
+                </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>

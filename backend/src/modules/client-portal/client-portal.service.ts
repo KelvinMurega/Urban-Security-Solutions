@@ -1,6 +1,5 @@
-import { IncidentStatus, InvoiceStatus, PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { IncidentStatus, InvoiceStatus } from '@prisma/client';
+import { prisma } from '../../shared/prisma';
 
 const workedHours = (checkedInAt: Date | null, checkedOutAt: Date | null, now: Date) => {
   if (!checkedInAt) return 0;

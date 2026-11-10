@@ -1,129 +1,130 @@
 // backend/src/modules/auth/auth.controller.ts
-import { Request, Response } from 'express';
-import { AuthService } from './auth.service';
+import { CookieOptions, Request, Response } from 'express';
 import { z } from 'zod';
+import { env } from '../../config/env';
+import { AUTH_COOKIE_NAME } from '../../middleware/auth.middleware';
+import { AuthService } from './auth.service';
+import { sendError } from '../../shared/http-error';
+import { emailSchema, passwordSchema } from '../../shared/password';
 
-const profileUpdateSchema = z.object({
-  name: z.string().min(2).optional(),
-  phone: z.string().min(7).optional(),
-  password: z.string().min(6).optional(),
-  avatarUrl: z.string().optional(),
+const loginSchema = z.object({
+  email: z.string().trim().max(191),
+  // Not trimmed: spaces are legitimate password characters.
+  password: z.string().min(1).max(200),
 });
 
-const AUTH_COOKIE_NAME = 'token';
+const registerSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  email: emailSchema,
+  password: passwordSchema,
+  phone: z.string().trim().min(7).max(30).optional(),
+});
 
-const authCookieOptions = () => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  domain: process.env.COOKIE_DOMAIN || undefined,
+const profileUpdateSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120).optional(),
+    phone: z.string().trim().min(7).max(30).optional(),
+    currentPassword: z.string().max(200).optional(),
+    password: passwordSchema.optional(),
+    avatarUrl: z.string().nullable().optional(),
+  });
+// (unknown keys are stripped by zod, so fields like role/status can never be self-assigned)
+
+const parseDurationMs = (value: string) => {
+  const amount = Number.parseInt(value, 10);
+  const unit = value.slice(-1);
+  const multiplier = unit === 's' ? 1_000 : unit === 'm' ? 60_000 : unit === 'h' ? 3_600_000 : 86_400_000;
+  return amount * multiplier;
+};
+
+const authCookieOptions = (): CookieOptions => ({
+  httpOnly: true, // not readable from JavaScript, so XSS cannot steal the session
+  secure: env.isProduction, // HTTPS-only outside local development
+  sameSite: 'lax',
+  domain: env.COOKIE_DOMAIN || undefined,
   path: '/',
-  maxAge: 24 * 60 * 60 * 1000, // matches the 24h JWT expiry
+  maxAge: parseDurationMs(env.JWT_EXPIRES_IN),
 });
+
+const GENERIC_LOGIN_ERROR = 'Invalid email or password.';
 
 export class AuthController {
-
-  // LOGIN METHOD
   static async login(req: Request, res: Response) {
     try {
-      const { email, password } = req.body;
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(401).json({ error: GENERIC_LOGIN_ERROR });
 
-      // 1. Verify User credentials
-      const user = await AuthService.validateUser(email, password);
+      const result = await AuthService.login(parsed.data.email, parsed.data.password, req.ip);
+      if (!result.ok) return res.status(401).json({ error: GENERIC_LOGIN_ERROR });
 
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
-      // 2. GENERATE TOKEN (This was likely missing or failing)
-      const token = AuthService.generateToken(user);
-
-      // 3. Set an httpOnly cookie so server-side middleware can verify the session,
-      // in addition to returning the token for the existing localStorage-based flow.
-      res.cookie(AUTH_COOKIE_NAME, token, authCookieOptions());
-
-      // 4. Send BOTH user and token
-      res.json({
-        token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          avatarUrl: (user as { avatarUrl?: string | null }).avatarUrl || null
-        }
-      });
-
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      const { tokenVersion, ...user } = result.user;
+      res.cookie(AUTH_COOKIE_NAME, AuthService.generateToken({ id: user.id, role: user.role, tokenVersion }), authCookieOptions());
+      // The token is deliberately NOT returned in the body: it lives only in the httpOnly cookie.
+      res.json({ user });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
-  // LOGOUT METHOD
   static async logout(req: Request, res: Response) {
-    res.clearCookie(AUTH_COOKIE_NAME, { ...authCookieOptions(), maxAge: undefined });
+    await AuthService.revokeSessionsFromToken((req.cookies as Record<string, string> | undefined)?.[AUTH_COOKIE_NAME]);
+    const { maxAge: _maxAge, ...clearOptions } = authCookieOptions();
+    res.clearCookie(AUTH_COOKIE_NAME, clearOptions);
     res.status(200).json({ success: true });
   }
 
-  // REGISTER METHOD (Optional, for creating the first admin)
   static async register(req: Request, res: Response) {
     try {
-      const user = await AuthService.register(req.body);
-      const token = AuthService.generateToken(user);
-      res.status(201).json({ token, user });
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      const parsed = registerSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
+
+      const user = await AuthService.registerFirstAdmin(parsed.data, req.ip);
+      const { tokenVersion, ...publicUser } = user;
+      res.cookie(AUTH_COOKIE_NAME, AuthService.generateToken({ id: user.id, role: user.role, tokenVersion }), authCookieOptions());
+      res.status(201).json({ user: publicUser });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
   static async me(req: Request, res: Response) {
     try {
-      const actor = (req as any).user as { id: string } | undefined;
-      if (!actor) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      const profile = await AuthService.getProfile(actor.id);
-      if (!profile) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
+      const profile = await AuthService.getProfile(req.user!.id);
+      if (!profile) return res.status(404).json({ error: 'User not found' });
       res.json(profile);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
   static async updateMe(req: Request, res: Response) {
     try {
-      const actor = (req as any).user as { id: string } | undefined;
-      if (!actor) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
       const parsed = profileUpdateSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.issues });
-      }
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
+      if (Object.keys(parsed.data).length === 0) return res.status(400).json({ error: 'No update fields provided.' });
 
-      const payload = parsed.data;
-      if (Object.keys(payload).length === 0) {
-        return res.status(400).json({ error: 'No update fields provided.' });
-      }
+      const { profile, passwordChanged } = await AuthService.updateProfile(req.user!.id, parsed.data);
+      const { tokenVersion, ...publicProfile } = profile;
 
-      const profile = await AuthService.updateProfile(actor.id, payload);
-      res.json(profile);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      // Password change revoked all sessions; re-issue a fresh cookie for this one.
+      if (passwordChanged) {
+        res.cookie(
+          AUTH_COOKIE_NAME,
+          AuthService.generateToken({ id: profile.id, role: profile.role, tokenVersion }),
+          authCookieOptions()
+        );
+      }
+      res.json(publicProfile);
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
-  static async guardsLite(req: Request, res: Response) {
+  static async guardsLite(_req: Request, res: Response) {
     try {
-      const guards = await AuthService.getGuardDirectory();
-      res.json(guards);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.json(await AuthService.getGuardDirectory());
+    } catch (error) {
+      sendError(res, error);
     }
   }
 }

@@ -1,8 +1,17 @@
-import { PrismaClient, Role } from '@prisma/client';
+import { Role, UserStatus } from '@prisma/client';
+import { prisma } from '../../shared/prisma';
+import { badRequest, notFound } from '../../shared/http-error';
 
-const prisma = new PrismaClient();
+const assertManager = async (managerId?: string) => {
+  if (!managerId) return;
+  const manager = await prisma.user.findUnique({ where: { id: managerId }, select: { role: true, status: true } });
+  if (!manager || manager.role === Role.CLIENT || manager.status !== UserStatus.ACTIVE) {
+    throw badRequest('Selected manager is not a valid active staff member.');
+  }
+};
 
 export const createSite = async (data: any) => {
+  await assertManager(data.managerId);
   return await prisma.site.create({
     data: {
       name: data.name,
@@ -62,6 +71,7 @@ export const getSiteById = async (id: string) => {
 };
 
 export const updateSite = async (id: string, data: any) => {
+  await assertManager(data.managerId);
   return await prisma.site.update({
     where: { id },
     data: {
@@ -88,12 +98,12 @@ export const deleteSite = async (id: string) => {
 export const addGuardToSite = async (siteId: string, data: any) => {
   const guardId = String(data.userId || data.guardId || '').trim();
   if (!guardId) {
-    throw new Error('guardId is required.');
+    throw badRequest('guardId is required.');
   }
 
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { id: true } });
   if (!site) {
-    throw new Error('Site not found.');
+    throw notFound('Site not found.');
   }
 
   const guard = await prisma.user.findUnique({
@@ -102,15 +112,15 @@ export const addGuardToSite = async (siteId: string, data: any) => {
   });
 
   if (!guard) {
-    throw new Error('Guard not found.');
+    throw notFound('Guard not found.');
   }
 
   if (guard.role !== Role.GUARD) {
-    throw new Error('Only GUARD users can be assigned to a site.');
+    throw badRequest('Only GUARD users can be assigned to a site.');
   }
 
-  if (guard.status !== 'ACTIVE') {
-    throw new Error('Cannot assign an inactive guard.');
+  if (guard.status !== UserStatus.ACTIVE) {
+    throw badRequest('Cannot assign an inactive guard.');
   }
 
   return await prisma.user.update({

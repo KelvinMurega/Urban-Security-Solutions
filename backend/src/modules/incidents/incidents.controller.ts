@@ -2,19 +2,21 @@ import { Request, Response } from 'express';
 import * as IncidentService from './incidents.service';
 import { Role, IncidentSeverity, IncidentStatus } from '@prisma/client';
 import { z } from 'zod';
+import { sendError } from '../../shared/http-error';
 
 const incidentCreateSchema = z.object({
-  title: z.string().min(2),
-  description: z.string().min(2),
+  // VARCHAR(191) columns: reject cleanly instead of failing in the database.
+  title: z.string().trim().min(2).max(191),
+  description: z.string().trim().min(2).max(191),
   severity: z.nativeEnum(IncidentSeverity).optional(),
-  siteId: z.string().min(1),
-  userId: z.string().min(1).optional(),
+  siteId: z.string().min(1).max(64),
+  userId: z.string().min(1).max(64).optional(),
   photos: z.array(z.string()).max(4).optional(),
 });
 
 const incidentUpdateSchema = z.object({
   status: z.nativeEnum(IncidentStatus).optional(),
-  resolutionDetails: z.string().optional(),
+  resolutionDetails: z.string().trim().max(191).optional(),
 });
 
 export class IncidentController {
@@ -41,10 +43,10 @@ export class IncidentController {
         return res.status(400).json({ error: 'userId is required.' });
       }
 
-      const incident = await IncidentService.createIncident(payload);
+      const incident = await IncidentService.createIncident(payload, actor);
       res.status(201).json(incident);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
@@ -61,8 +63,8 @@ export class IncidentController {
           ? await IncidentService.getAllIncidents()
           : await IncidentService.getIncidentsByUser(actor.id);
       res.json(incidents);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
@@ -84,8 +86,8 @@ export class IncidentController {
 
       const incident = await IncidentService.updateIncident(req.params.id as string, parsed.data);
       res.json(incident);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
@@ -106,8 +108,8 @@ export class IncidentController {
         return res.status(403).json({ error: 'Forbidden' });
       }
       res.json(incident);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 }

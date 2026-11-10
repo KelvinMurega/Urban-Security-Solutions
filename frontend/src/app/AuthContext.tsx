@@ -4,16 +4,12 @@ import { ReactNode } from 'react';
 import axios from 'axios';
 
 if (typeof window !== 'undefined') {
+  // Authentication is carried exclusively by the httpOnly `token` cookie set by the API.
+  // The token is never readable from JavaScript, so an XSS bug cannot exfiltrate it.
   axios.defaults.withCredentials = true;
 
-  axios.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  });
+  // Remove tokens persisted by older builds of the app.
+  localStorage.removeItem('token');
 
   axios.interceptors.response.use(
     (response) => response,

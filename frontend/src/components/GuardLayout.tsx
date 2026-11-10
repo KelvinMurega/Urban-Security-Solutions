@@ -33,10 +33,10 @@ export default function GuardLayout({ children }: { children: React.ReactNode })
   };
 
   const refreshSessionDetails = () => {
-    const token = localStorage.getItem('token');
+    // Display details only; the httpOnly session cookie is enforced by middleware + API.
     const userStr = localStorage.getItem('user');
 
-    if (!token || !userStr) {
+    if (!userStr) {
       router.push('/');
       return;
     }

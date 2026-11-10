@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { prisma } from '../../shared/prisma';
+import { forbidden, notFound } from '../../shared/http-error';
 import { persistImageDataUrls } from '../../shared/uploads';
-
-const prisma = new PrismaClient();
 
 export const createReport = async (data: any) => {
   const shift = await prisma.shift.findUnique({
@@ -11,11 +10,11 @@ export const createReport = async (data: any) => {
   });
 
   if (!shift) {
-    throw new Error('Shift not found.');
+    throw notFound('Shift not found.');
   }
 
   if (shift.userId !== data.userId) {
-    throw new Error('You can only submit logs for your own shifts.');
+    throw forbidden('You can only submit logs for your own shifts.');
   }
 
   const id = randomUUID();

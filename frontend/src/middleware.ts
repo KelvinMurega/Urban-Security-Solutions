@@ -28,7 +28,13 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    const { payload } = await jwtVerify(token, getJwtSecret());
+    // Must match the backend's signing options exactly (algorithm pinned, issuer/audience checked).
+    // The API remains the real authority: it also re-checks account status and revocation.
+    const { payload } = await jwtVerify(token, getJwtSecret(), {
+      algorithms: ['HS256'],
+      issuer: 'urban-security-api',
+      audience: 'urban-security-app',
+    });
     const role = payload.role as string | undefined;
     const isGuardArea = pathname === GUARD_PREFIX || pathname.startsWith(`${GUARD_PREFIX}/`);
     const isClientArea = pathname === CLIENT_PREFIX || pathname.startsWith(`${CLIENT_PREFIX}/`);
@@ -48,7 +54,9 @@ export async function middleware(request: NextRequest) {
 
     return NextResponse.next();
   } catch {
-    return NextResponse.redirect(new URL('/', request.url));
+    const response = NextResponse.redirect(new URL('/', request.url));
+    response.cookies.delete('token');
+    return response;
   }
 }
 

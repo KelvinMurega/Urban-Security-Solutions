@@ -56,6 +56,15 @@ model User {
   role      Role     @default(GUARD) // Uses the Enum instead of String
   status    UserStatus @default(ACTIVE)
 
+  // Session security: bumping tokenVersion revokes every token issued before it
+  // (logout, password change, deactivation, role change).
+  tokenVersion        Int       @default(0)
+  // Brute-force protection: lock the account after repeated failed logins.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  passwordChangedAt   DateTime?
+
   // Relations
   managedSites Site[]    @relation("SiteManager")
   assignedShifts Shift[]

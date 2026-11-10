@@ -36,16 +36,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   const refreshSessionDetails = () => {
-    const token = localStorage.getItem('token');
+    // Display details only; the httpOnly session cookie is enforced by middleware + API.
     const user = localStorage.getItem('user');
 
-    if (!token) {
-      router.push('/');
-      return;
-    }
-
     if (!user) {
-      setIsAuthorized(true);
+      router.push('/');
       return;
     }
 

@@ -21,6 +21,7 @@ type ProfileForm = {
   name: string;
   email: string;
   phone: string;
+  currentPassword: string;
   password: string;
   confirmPassword: string;
 };
@@ -42,6 +43,7 @@ export default function ProfilePage() {
     name: '',
     email: '',
     phone: '',
+    currentPassword: '',
     password: '',
     confirmPassword: ''
   });
@@ -59,6 +61,7 @@ export default function ProfilePage() {
       name: parsed.name || '',
       email: parsed.email || '',
       phone: parsed.phone || '',
+      currentPassword: '',
       password: '',
       confirmPassword: ''
     });
@@ -121,8 +124,13 @@ export default function ProfilePage() {
   const handleUpdate = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (form.password && form.password.length < 6) {
-      showToast('Password must be at least 6 characters.', 'error');
+    if (form.password && form.password.length < 10) {
+      showToast('Password must be at least 10 characters.', 'error');
+      return;
+    }
+
+    if (form.password && !form.currentPassword) {
+      showToast('Enter your current password to set a new one.', 'error');
       return;
     }
 
@@ -136,17 +144,18 @@ export default function ProfilePage() {
     setLoading(true);
 
     try {
-      const payload: { name: string; email: string; phone: string; password?: string } = {
+      const payload: { name: string; phone: string; currentPassword?: string; password?: string } = {
         name: form.name.trim(),
-        email: form.email,
         phone: form.phone.trim()
       };
 
       if (form.password) {
+        payload.currentPassword = form.currentPassword;
         payload.password = form.password;
       }
 
-      const res = await axios.put(`${apiUrl}/api/users/guards/${user.id}`, payload);
+      // Self-service endpoint: re-verifies the current password before changing it.
+      const res = await axios.put(`${apiUrl}/api/auth/me`, payload);
 
       const updatedUser: LocalUser = {
         ...user,
@@ -157,12 +166,15 @@ export default function ProfilePage() {
 
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setUser(updatedUser);
-      setForm((prev) => ({ ...prev, password: '', confirmPassword: '' }));
+      setForm((prev) => ({ ...prev, currentPassword: '', password: '', confirmPassword: '' }));
       window.dispatchEvent(new Event('profile:updated'));
       showToast('Profile updated successfully.', 'success');
     } catch (error) {
       console.error(error);
-      showToast('Failed to update profile.', 'error');
+      const message = axios.isAxiosError(error) && typeof error.response?.data?.error === 'string'
+        ? error.response.data.error
+        : 'Failed to update profile.';
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -245,6 +257,18 @@ export default function ProfilePage() {
 
               <div className="border-t border-gray-200 pt-4">
                 <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-indigo-900">Security</h3>
+
+                <div className="mb-4">
+                  <label className="mb-1 block text-sm font-semibold text-gray-700">Current Password</label>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    className="w-full rounded-lg border border-gray-300 p-3 text-black outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                    value={form.currentPassword}
+                    onChange={(e) => setForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                    placeholder="Required to set a new password"
+                  />
+                </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>

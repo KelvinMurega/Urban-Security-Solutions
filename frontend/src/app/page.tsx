@@ -22,21 +22,22 @@ export default function LoginPage() {
     try {
       const apiUrl = resolveApiUrl();
       const normalizedEmail = email.trim().toLowerCase();
-      const normalizedPassword = password.trim();
 
       const res = await axios.post(`${apiUrl}/api/auth/login`, {
         email: normalizedEmail,
-        password: normalizedPassword
+        password
       });
 
-      const { token, user: userData } = res.data;
+      // The session itself is an httpOnly cookie set by the API; only non-sensitive
+      // display details are kept client-side.
+      const { user: userData } = res.data;
 
-      if (!token || !userData?.role) {
-        setError('Login failed: No token received from server.');
+      if (!userData?.role) {
+        setError('Login failed. Please try again.');
         return;
       }
 
-      localStorage.setItem('token', token);
+      localStorage.removeItem('token');
       localStorage.setItem('user', JSON.stringify(userData));
 
       if (userData.role === 'GUARD') {

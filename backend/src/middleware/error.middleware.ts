@@ -1,18 +1,18 @@
 import { NextFunction, Request, Response } from 'express';
+import { toHttpError } from '../shared/http-error';
 
-export const notFoundHandler = (req: Request, res: Response) => {
-  res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
+export const notFoundHandler = (_req: Request, res: Response) => {
+  // Do not echo the requested path back (reflected content / route enumeration).
+  res.status(404).json({ error: 'Not found' });
 };
 
 // Express recognizes this as an error handler by its 4-argument signature.
-export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error(`[error] ${req.method} ${req.originalUrl}:`, err);
-
-  const status = err.status || err.statusCode || 500;
-  const message =
-    process.env.NODE_ENV === 'production' && status >= 500
-      ? 'Internal server error'
-      : err.message || 'Internal server error';
-
-  res.status(status).json({ error: message });
+// Only HttpError messages are shown to callers; everything else becomes a generic 500.
+export const errorHandler = (err: unknown, req: Request, res: Response, _next: NextFunction) => {
+  const httpError = toHttpError(err);
+  if (httpError.status >= 500) {
+    console.error(`[error] ${req.method} ${req.originalUrl}:`, err);
+  }
+  if (res.headersSent) return;
+  res.status(httpError.status).json({ error: httpError.message });
 };

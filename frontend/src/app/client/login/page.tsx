@@ -26,9 +26,9 @@ export default function ClientLoginPage() {
         email: email.trim().toLowerCase(),
         password,
       });
-      const { token, user } = response.data || {};
+      const { user } = response.data || {};
 
-      if (user?.role !== 'CLIENT' || !token) {
+      if (user?.role !== 'CLIENT') {
         await axios.post(`${apiUrl}/api/auth/logout`).catch(() => undefined);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -36,7 +36,7 @@ export default function ClientLoginPage() {
         return;
       }
 
-      localStorage.setItem('token', token);
+      localStorage.removeItem('token');
       localStorage.setItem('user', JSON.stringify(user));
       router.replace('/client/dashboard');
     } catch (loginError: unknown) {

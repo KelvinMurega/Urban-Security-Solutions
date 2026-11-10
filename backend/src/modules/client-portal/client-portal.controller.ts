@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { sendError } from '../../shared/http-error';
 import * as ClientPortalService from './client-portal.service';
 
 export class ClientPortalController {
@@ -7,8 +8,8 @@ export class ClientPortalController {
       const clientId = (req as any).user?.id;
       if (!clientId) return res.status(401).json({ error: 'Unauthorized' });
       res.json(await ClientPortalService.getDashboard(String(clientId)));
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 }

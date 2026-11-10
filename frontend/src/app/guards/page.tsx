@@ -134,7 +134,7 @@ export default function GuardsPage() {
               <input placeholder={editingId ? "Reset Password (Optional)" : "Password"} type="password"
                 className="border p-2 rounded text-black"
                 value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-                minLength={6}
+                minLength={10}
                 required={!editingId}
               />
 

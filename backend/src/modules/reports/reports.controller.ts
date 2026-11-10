@@ -2,11 +2,12 @@ import { Request, Response } from 'express';
 import * as ReportService from './reports.service';
 import { Role } from '@prisma/client';
 import { z } from 'zod';
+import { sendError } from '../../shared/http-error';
 
 const reportCreateSchema = z.object({
-  content: z.string().min(1),
-  shiftId: z.string().min(1),
-  userId: z.string().min(1).optional(),
+  content: z.string().trim().min(1).max(191), // VARCHAR(191) column
+  shiftId: z.string().min(1).max(64),
+  userId: z.string().min(1).max(64).optional(),
   photos: z.array(z.string()).max(4).optional(),
 });
 
@@ -35,8 +36,8 @@ export class ReportController {
 
       const report = await ReportService.createReport(payload);
       res.status(201).json(report);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 
@@ -52,8 +53,8 @@ export class ReportController {
           ? await ReportService.getAllReports()
           : await ReportService.getReportsByUser(actor.id);
       res.json(reports);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+    } catch (error) {
+      sendError(res, error);
     }
   }
 }

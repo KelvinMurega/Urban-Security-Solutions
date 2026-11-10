@@ -27,10 +27,9 @@ export default function LoginPage() {
       });
 
       if (response.status === 200) {
-        const { token, user } = response.data || {};
-        if (token) {
-          localStorage.setItem('token', token);
-        }
+        // Session is the httpOnly cookie; only display details are stored locally.
+        const { user } = response.data || {};
+        localStorage.removeItem('token');
         if (user) {
           localStorage.setItem('user', JSON.stringify(user));
         }
