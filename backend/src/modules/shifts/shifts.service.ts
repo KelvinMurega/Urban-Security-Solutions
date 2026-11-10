@@ -2,6 +2,43 @@ import { Role, UserStatus } from '@prisma/client';
 import { distanceMeters } from '../../shared/geo';
 import { prisma } from '../../shared/prisma';
 import { badRequest, forbidden, notFound } from '../../shared/http-error';
+import { Page } from '../../shared/pagination';
+import { securityLog } from '../../shared/security-log';
+
+// Device/network evidence captured with every check-in/out.
+export type PositionEvidence = {
+  lat: number;
+  lng: number;
+  accuracy?: number;
+  ip?: string;
+  userAgent?: string;
+};
+
+const EARLY_CHECK_IN_MINUTES = 120;
+
+// Phones can spoof GPS. We cannot prove a location, so we record the evidence and flag
+// patterns a supervisor should review rather than silently trusting the coordinates.
+const locationFlagReasons = (
+  site: { latitude: number | null; longitude: number | null; geofenceRadiusMeters: number },
+  evidence: PositionEvidence,
+  timing?: { startTime: Date; endTime: Date | null; now: Date }
+) => {
+  const reasons: string[] = [];
+  if (site.latitude === null || site.longitude === null) reasons.push('site has no geofence coordinates');
+  if (evidence.accuracy === undefined) reasons.push('device did not report GPS accuracy');
+  else if (evidence.accuracy > site.geofenceRadiusMeters) reasons.push(`GPS accuracy ${Math.round(evidence.accuracy)}m exceeds geofence`);
+  else if (evidence.accuracy === 0) reasons.push('GPS accuracy of 0m is typical of mock locations');
+  if (Number.isInteger(evidence.lat) && Number.isInteger(evidence.lng)) reasons.push('coordinates look synthetic');
+  if (timing) {
+    const minutesEarly = (timing.startTime.getTime() - timing.now.getTime()) / 60_000;
+    if (minutesEarly > EARLY_CHECK_IN_MINUTES) reasons.push(`checked in ${Math.round(minutesEarly)} minutes before shift start`);
+    if (timing.endTime && timing.now > timing.endTime) reasons.push('checked in after scheduled shift end');
+  }
+  return reasons;
+};
+
+const mergeFlags = (existing: string | null, reasons: string[]) =>
+  [existing, ...reasons].filter(Boolean).join('; ').slice(0, 255) || null;
 
 const MAX_SHIFT_HOURS = 24;
 
@@ -75,23 +112,21 @@ export class ShiftService {
   }
 
   // 2. Get All Shifts (Sorted by newest)
-  static async getAllShifts() {
-    const shifts = await prisma.shift.findMany({
-      include: HANDOVER_INCLUDE,
-      orderBy: { startTime: 'desc' }
-    });
-
-    return shifts.map((shift) => this.withWorkedHours(shift));
+  static async getAllShifts(page: Page) {
+    const [shifts, total] = await Promise.all([
+      prisma.shift.findMany({ include: HANDOVER_INCLUDE, orderBy: { startTime: 'desc' }, ...page }),
+      prisma.shift.count(),
+    ]);
+    return [shifts.map((shift) => this.withWorkedHours(shift)), total] as const;
   }
 
-  static async getShiftsByUser(userId: string) {
-    const shifts = await prisma.shift.findMany({
-      where: { userId },
-      include: HANDOVER_INCLUDE,
-      orderBy: { startTime: 'desc' }
-    });
-
-    return shifts.map((shift) => this.withWorkedHours(shift));
+  static async getShiftsByUser(userId: string, page: Page) {
+    const where = { userId };
+    const [shifts, total] = await Promise.all([
+      prisma.shift.findMany({ where, include: HANDOVER_INCLUDE, orderBy: { startTime: 'desc' }, ...page }),
+      prisma.shift.count({ where }),
+    ]);
+    return [shifts.map((shift) => this.withWorkedHours(shift)), total] as const;
   }
 
   // Enforces the site's geofence when both the site and the submitted position have
@@ -118,8 +153,9 @@ export class ShiftService {
   static async checkInShift(
     shiftId: string,
     guardId: string,
-    { lat, lng, previousGuardId }: { lat: number; lng: number; previousGuardId?: string }
+    { previousGuardId, ...evidence }: PositionEvidence & { previousGuardId?: string }
   ) {
+    const { lat, lng } = evidence;
     const shift = await prisma.shift.findUnique({ where: { id: shiftId }, include: { site: true } });
     if (!shift) {
       throw notFound('Shift not found.');
@@ -136,6 +172,12 @@ export class ShiftService {
     await assertHandoverGuard(previousGuardId, guardId);
 
     const distance = this.enforceGeofence(shift.site, lat, lng);
+    const checkInFlags = locationFlagReasons(shift.site, evidence, {
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      now: new Date(),
+    });
+    if (checkInFlags.length) securityLog('shift.location_flagged', { shiftId, guardId, reasons: checkInFlags });
 
     const updated = await prisma.shift.update({
       where: { id: shiftId },
@@ -143,6 +185,11 @@ export class ShiftService {
         checkedInAt: new Date(),
         checkInLat: lat,
         checkInLng: lng,
+        checkInAccuracyMeters: evidence.accuracy ?? null,
+        checkInIp: evidence.ip?.slice(0, 45) ?? null,
+        checkInUserAgent: evidence.userAgent?.slice(0, 255) ?? null,
+        locationFlagged: checkInFlags.length > 0,
+        locationFlagReason: mergeFlags(null, checkInFlags.map((reason) => `check-in: ${reason}`)),
         checkInFromUserId: previousGuardId || null,
         status: 'ACTIVE'
       },
@@ -155,8 +202,9 @@ export class ShiftService {
   static async checkOutShift(
     shiftId: string,
     guardId: string,
-    { lat, lng, nextGuardId }: { lat: number; lng: number; nextGuardId?: string }
+    { nextGuardId, ...evidence }: PositionEvidence & { nextGuardId?: string }
   ) {
+    const { lat, lng } = evidence;
     const shift = await prisma.shift.findUnique({ where: { id: shiftId }, include: { site: true } });
     if (!shift) {
       throw notFound('Shift not found.');
@@ -173,6 +221,8 @@ export class ShiftService {
     await assertHandoverGuard(nextGuardId, guardId);
 
     const distance = this.enforceGeofence(shift.site, lat, lng);
+    const checkOutFlags = locationFlagReasons(shift.site, evidence);
+    if (checkOutFlags.length) securityLog('shift.location_flagged', { shiftId, guardId, reasons: checkOutFlags });
 
     const updated = await prisma.shift.update({
       where: { id: shiftId },
@@ -180,6 +230,11 @@ export class ShiftService {
         checkedOutAt: new Date(),
         checkOutLat: lat,
         checkOutLng: lng,
+        checkOutAccuracyMeters: evidence.accuracy ?? null,
+        checkOutIp: evidence.ip?.slice(0, 45) ?? null,
+        checkOutUserAgent: evidence.userAgent?.slice(0, 255) ?? null,
+        locationFlagged: shift.locationFlagged || checkOutFlags.length > 0,
+        locationFlagReason: mergeFlags(shift.locationFlagReason, checkOutFlags.map((reason) => `check-out: ${reason}`)),
         checkOutToUserId: nextGuardId || null,
         status: 'COMPLETED'
       },

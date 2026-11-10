@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../shared/prisma';
 import { badRequest, forbidden } from '../../shared/http-error';
 import { persistImageDataUrls } from '../../shared/uploads';
+import { Page } from '../../shared/pagination';
 
 // A guard may only report incidents for a site they are assigned to or have a shift at.
 const assertGuardWorksAtSite = async (guardId: string, siteId: string) => {
@@ -46,8 +47,9 @@ export const createIncident = async (data: any, actor: { id: string; role: Role 
   });
 };
 
-export const getAllIncidents = async () => {
-  return await prisma.incident.findMany({
+export const getAllIncidents = async (page: Page) => {
+  return Promise.all([prisma.incident.findMany({
+    ...page,
     include: {
       user: { select: { name: true, role: true } },
       site: { select: { name: true } },
@@ -55,7 +57,7 @@ export const getAllIncidents = async () => {
     orderBy: {
       createdAt: 'desc', // Use the audit field
     },
-  });
+  }), prisma.incident.count()]);
 };
 
 export const getIncidentById = async (id: string) => {
@@ -78,8 +80,9 @@ export const updateIncident = async (id: string, data: any) => {
   });
 };
 
-export const getIncidentsByUser = async (userId: string) => {
-  return await prisma.incident.findMany({
+export const getIncidentsByUser = async (userId: string, page: Page) => {
+  return Promise.all([prisma.incident.findMany({
+    ...page,
     where: { userId },
     include: {
       user: { select: { name: true, role: true } },
@@ -88,5 +91,5 @@ export const getIncidentsByUser = async (userId: string) => {
     orderBy: {
       createdAt: 'desc',
     },
-  });
+  }), prisma.incident.count({ where: { userId } })]);
 };

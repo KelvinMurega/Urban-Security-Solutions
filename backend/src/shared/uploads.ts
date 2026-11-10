@@ -1,14 +1,12 @@
-import { promises as fs } from 'fs';
-import path from 'path';
 import { randomUUID } from 'crypto';
 import { badRequest } from './http-error';
+import { contentTypeFor, storage } from './storage';
 
 const DATA_URL_PATTERN = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/]+={0,2})$/i;
 
 export const MAX_PHOTOS_PER_SUBMISSION = 4;
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2MB per image
 
-export const UPLOAD_ROOT = path.join(process.cwd(), 'uploads');
 export const UPLOAD_CATEGORIES = ['avatars', 'incidents', 'reports'] as const;
 export type UploadCategory = (typeof UPLOAD_CATEGORIES)[number];
 
@@ -54,10 +52,8 @@ export const decodeImageDataUrl = (dataUrl: string) => {
 // Stored file names are `<ownerId>-<random uuid>.<ext>`: the owner id lets the file route
 // authorize access; the random part makes URLs unguessable.
 const writeImage = async (category: UploadCategory, ownerId: string, buffer: Buffer, extension: ImageType) => {
-  const directory = path.join(UPLOAD_ROOT, category);
-  await fs.mkdir(directory, { recursive: true });
   const fileName = `${ownerId}-${randomUUID()}.${extension}`;
-  await fs.writeFile(path.join(directory, fileName), buffer, { flag: 'wx' });
+  await storage.put(`${category}/${fileName}`, buffer, contentTypeFor(fileName));
   return `/uploads/${category}/${fileName}`;
 };
 
@@ -99,7 +95,7 @@ export const deleteManagedUpload = async (value: string | null | undefined, cate
   if (!value || !isManagedUploadPath(value, category)) return;
   const fileName = value.slice(`/uploads/${category}/`.length);
   try {
-    await fs.unlink(path.join(UPLOAD_ROOT, category, fileName));
+    await storage.delete(`${category}/${fileName}`);
   } catch {
     // Missing/locked old files must not block the update.
   }

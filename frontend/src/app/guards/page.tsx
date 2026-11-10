@@ -24,11 +24,7 @@ export default function GuardsPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', siteId: '', status: 'ACTIVE' });
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  async function fetchData() {
     try {
       const [guardsRes, sitesRes] = await Promise.all([
         axios.get(`${apiUrl}/api/users/guards`),
@@ -41,6 +37,10 @@ export default function GuardsPage() {
       showToast('Failed to load guards.', 'error');
     }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleEditClick = (guard: any) => {
     setEditingId(guard.id);

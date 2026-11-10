@@ -1,155 +1,116 @@
 # Urban Security Solutions
 
-A guard management system for Urban Security Solutions Limited — an **Admin portal** for overseeing sites, personnel, and incidents, and a mobile-first **Guard portal** for shift check-in/out, incident reporting, and daily logs.
+A guard management system for Urban Security Solutions Limited: an **Admin portal** for overseeing sites, personnel, incidents and billing, a mobile-first **Guard portal** for GPS-verified shift check-in/out and incident reporting, and a **Client portal** where customers see activity and invoices for their own sites.
+
+[![CI](https://github.com/KelvinMurega/Urban-Security-Solutions/actions/workflows/ci.yml/badge.svg)](https://github.com/KelvinMurega/Urban-Security-Solutions/actions/workflows/ci.yml)
+
+- **Deploying?** Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+- **Operating it?** Read [docs/RUNBOOK.md](docs/RUNBOOK.md).
+- **Security model and reporting:** [SECURITY.md](SECURITY.md).
 
 ## Features
 
-**Admin portal**
-- Personnel management (create/update/deactivate guards, assign to sites)
-- Site management, including GPS coordinates and a configurable geofence radius
-- Shift scheduling and a live roster with check-in/check-out status
-- Incident tracking (severity, status, resolution notes)
-- Daily log review
+**Admin portal**: personnel and client management, sites with GPS geofences, shift scheduling with a live roster, incident tracking and resolution, daily logs, invoicing, and a read-only **audit log** of every change.
 
-**Guard portal** (mobile-first)
-- Live dashboard with next assignment and weekly stats
-- Shift schedule with **GPS-verified check-in/check-out** — rejects check-in/out outside a site's geofence when the site has coordinates set, and records the actual distance
-- Guard handover linked to real guard accounts (not free-text names)
-- Incident reporting and daily log submission
-- Profile management with photo upload
+**Guard portal** (mobile-first): **GPS-verified check-in/out** (rejected outside the site's geofence; suspicious readings such as mock-location accuracy are flagged for supervisor review), guard handovers, incident reports with photo evidence, daily logs, profile.
 
-**Platform**
-- JWT authentication with an httpOnly session cookie, verified server-side by Next.js middleware (not just client-side checks)
-- Role-based access control (`ADMIN` / `GUARD`)
-- Rate limiting, centralized error handling, request logging
+**Client portal**: attendance, hours, incidents, guard reports and invoices for the client's assigned sites only.
 
-## Tech Stack
+**Platform**: secure by design and by default. See [SECURITY.md](SECURITY.md).
+
+## Tech stack
 
 | | |
 |---|---|
-| **Backend** | Node.js, Express 5, TypeScript, Prisma ORM, MySQL |
-| **Frontend** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS |
-| **Auth** | JWT (`jsonwebtoken`), `bcryptjs`, httpOnly cookies |
-| **Validation** | Zod |
+| **Backend** | Node.js 22, Express 5, TypeScript, Prisma, MySQL 8 |
+| **Frontend** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4 |
+| **Auth** | httpOnly session cookie (JWT, HS256, revocable), bcrypt |
+| **Ops** | Docker, Caddy (automatic HTTPS), pino structured logs, optional Sentry, S3/R2 evidence storage |
+| **Quality** | Vitest + Supertest against real MySQL, GitHub Actions CI, Dependabot |
 
-## Project Structure
+## Project structure
 
 ```
 backend/
-  prisma/           schema.prisma, migrations, seed script
+  prisma/            schema, migrations, first-admin seed
+  scripts/           retention.ts (data-protection retention job)
   src/
-    modules/        auth, users, sites, shifts, incidents, reports (controller + service + routes per module)
-    middleware/      auth, rate limiting, centralized error handling
-    shared/          cross-cutting utilities (e.g. geofencing distance calc)
-    server.ts        Express app entry point
+    config/          validated environment + allowed origins
+    middleware/      auth (DB-backed sessions), CSRF, rate limits, errors
+    modules/         auth, users, sites, shifts, incidents, reports, clients, client-portal, invoices, files, audit
+    shared/          prisma, logger, storage (local/S3), uploads, audit, pagination, password policy
+    app.ts           Express app (imported by tests)
+    server.ts        process entry point
+  tests/             unit + integration tests
 frontend/
-  src/
-    app/             Next.js App Router pages — admin routes at the root, guard routes under /guard, client routes under /client
-    components/       AdminLayout, GuardLayout, ClientLayout, shared UI components
-    lib/              API URL resolution, avatar URL helpers
-    middleware.ts     server-side route/role enforcement
-urban-security-solutions/
-  index.html          Standalone client-facing company website
-  server.js           Static site server and client-login redirect
+  src/app/           admin routes at /, guard routes under /guard, client routes under /client
+  src/middleware.ts  server-side route/role enforcement
+deploy/              Caddyfile, backup.sh, restore.sh
+docker-compose.yml   production stack
 ```
 
-## Getting Started
+## Local development
 
-### Prerequisites
-- Node.js 18+
-- A MySQL server
+Prerequisites: Node.js 22+, MySQL 8, (optional) Docker.
 
-### 1. Backend setup
+### Backend
 
 ```bash
 cd backend
 npm install
-cp .env.example .env   # then fill in DATABASE_URL and a real JWT_SECRET
+cp .env.example .env          # fill in DATABASE_URL and a random JWT_SECRET (32+ chars); keep NODE_ENV=development
 npx prisma migrate deploy
-npm run seed            # creates the initial admin user
-npm run dev              # starts on http://localhost:5000
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='a long passphrase' npm run seed   # first admin; there are no default credentials
+npm run dev                   # http://localhost:5000
 ```
 
-Default seeded admin login: `admin@urbansecurity.com` / `admin123` — **change this password after first login.**
-
-### 2. Frontend setup
+### Frontend
 
 ```bash
 cd frontend
 npm install
+echo 'JWT_SECRET="<same value as backend/.env>"' > .env.local
+npm run dev                   # http://localhost:3005 (also reachable from phones on your LAN)
 ```
 
-Create `frontend/.env.local`:
+Leave `NEXT_PUBLIC_API_URL` unset locally: the app then targets `<this host>:5000`.
+
+### Tests
+
+Integration tests need a throwaway MySQL database whose name contains `test` (they refuse to run against anything else):
 
 ```bash
-# Leave NEXT_PUBLIC_API_URL unset to auto-target the backend on the same host, port 5000.
-# NEXT_PUBLIC_API_URL=http://192.168.1.50:5000
-
-# Must match the backend's JWT_SECRET exactly — used by middleware.ts to verify
-# the session cookie server-side. Server-only; never exposed to the browser.
-JWT_SECRET="<same value as backend/.env>"
+docker run -d --name uss-test-mysql -e MYSQL_ROOT_PASSWORD=testroot -e MYSQL_DATABASE=uss_test -p 3307:3306 mysql:8.4
+cd backend
+DATABASE_URL=mysql://root:testroot@127.0.0.1:3307/uss_test npx prisma migrate deploy
+TEST_DATABASE_URL=mysql://root:testroot@127.0.0.1:3307/uss_test npm test
 ```
 
-```bash
-npm run dev   # starts on http://localhost:3005
-```
+### Client-facing website
 
-### 3. Client-facing website
-
-```bash
-cd urban-security-solutions
-npm run dev   # starts on http://localhost:3006
-```
-
-The website's **Client login** link redirects to the client sign-in page at `http://localhost:3005/client/login` by default. Set `CLIENT_PORTAL_URL` on the website server when the application runs at a different URL.
-
-An admin creates client accounts and assigns their sites from **Clients** in the admin navigation. Clients sign in with the main application login and are routed to `/client/dashboard`; they can see attendance, shift hours, incidents, guard reports, and invoices for their assigned sites only. Admins issue and update invoices from **Invoices**. Set each invoice's three-letter currency code explicitly. There is no public client registration or client self-payment flow.
-
-## Environment Variables
-
-**`backend/.env`** (see `backend/.env.example`)
-
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | MySQL connection string |
-| `JWT_SECRET` | Signing secret for auth tokens — use a long random value, rotate before production |
-| `PORT` | Backend port (default `5000`) |
-| `HOST` | Bind address (default `0.0.0.0`) |
-| `NODE_ENV` | `development` / `production` — controls cookie `secure` flag and error verbosity |
-| `CORS_ORIGINS` | Comma-separated allowed origins (LAN/localhost origins are always allowed) |
-| `COOKIE_DOMAIN` | Optional — set when the frontend and backend run on different subdomains of the same site in production |
-
-**`frontend/.env.local`**
-
-| Variable | Description |
-|---|---|
-| `NEXT_PUBLIC_API_URL` | Backend URL; auto-detected from the request host if unset |
-| `JWT_SECRET` | Must match the backend's secret — used by `middleware.ts` |
-
-## Data Model
-
-Defined in `backend/prisma/schema.prisma`:
-
-- **User** — `ADMIN`, `GUARD`, or `CLIENT`; guards are assigned to a `Site`, while clients are linked to sites through `ClientSite`
-- **Site** — name, address, optional GPS coordinates + geofence radius (meters)
-- **Shift** — scheduled window, check-in/out timestamps and GPS coordinates, guard handover links
-- **Incident** — severity (`LOW`/`MEDIUM`/`HIGH`/`CRITICAL`), status, resolution notes
-- **Report** — a guard's daily log entry, tied to a shift
-- **Invoice** — admin-issued client bill with amount, currency, due date, status, and optional site
-
-## Security Notes
-
-- Passwords are hashed with `bcryptjs`; there is no plaintext fallback.
-- Sessions use an httpOnly cookie (verified by `frontend/src/middleware.ts`) plus a bearer token for API calls.
-- Login is rate-limited (10 attempts / 15 min); the API overall is rate-limited (300 req / 15 min per IP).
-- Before deploying to production: rotate `JWT_SECRET`, set `NODE_ENV=production`, and confirm `backend/.env` is not committed (it's gitignored).
+`urban-security-solutions/` is a separate static site (its own repository). Its **Client login** link points at `/client/login` of this app (`CLIENT_PORTAL_URL`).
 
 ## Scripts
 
 | | Backend | Frontend |
 |---|---|---|
 | Dev server | `npm run dev` | `npm run dev` |
-| Build | `npm run build` | `npm run build` |
-| Start (prod) | `npm start` | `npm start` |
-| Seed database | `npm run seed` | — |
+| Type-check | `npm run typecheck` | `npx tsc --noEmit` |
+| Tests | `npm test` | — |
 | Lint | — | `npm run lint` |
+| Build / start | `npm run build` / `npm start` | `npm run build` / `npm start` |
+| Apply migrations | `npm run db:migrate` | — |
+| Schema drift check | `npm run db:check-drift` | — |
+| First admin | `npm run seed` | — |
+| Data retention | `npm run retention` (dry run) / `-- --apply` | — |
+
+## Data model
+
+Defined in `backend/prisma/schema.prisma`:
+
+- **User**: `ADMIN`, `GUARD` or `CLIENT`, with session version and lockout state
+- **Site**: address, GPS coordinates, geofence radius
+- **Shift**: schedule, check-in/out time, location, accuracy, device evidence, review flag, handovers
+- **Incident** / **Report**: guard submissions with private photo evidence
+- **ClientSite** / **Invoice**: client access and billing
+- **AuditLog**: append-only who/what/when/where

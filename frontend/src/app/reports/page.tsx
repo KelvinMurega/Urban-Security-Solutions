@@ -30,7 +30,7 @@ export default function ReportsPage() {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  async function fetchData() {
     try {
       const [repRes, guardRes, shiftRes] = await Promise.all([
         axios.get(`${apiUrl}/api/reports`),

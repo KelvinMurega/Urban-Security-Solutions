@@ -146,6 +146,7 @@ export default function LoginPage() {
                 {loading ? 'Verifying...' : 'Sign In'}
               </button>
             </form>
+            <p className="mt-4 text-center text-xs text-gray-500"><a href="/privacy" className="hover:underline">Privacy notice</a></p>
             <p className="mt-6 text-center text-xs text-slate-600">
               Client account? <Link href="/client/login" className="font-semibold text-slate-900 underline underline-offset-4">Sign in to the client portal</Link>
             </p>

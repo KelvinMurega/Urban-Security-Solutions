@@ -98,6 +98,7 @@ export default function ClientLoginPage() {
                 {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <span aria-hidden="true">↗</span>}
               </button>
             </form>
+            <p className="mt-4 text-center text-xs text-gray-500"><a href="/privacy" className="hover:underline">Privacy notice</a></p>
 
             <p className="mt-6 border-t border-[#dce2da] pt-5 text-xs leading-5 text-[#758078]">Need access? Contact your Urban Security account administrator to set up your client account.</p>
             <p className="mt-5 text-center text-xs text-[#7c877f]">Not a client? <Link href="/" className="font-semibold text-[#435d37] underline decoration-[#9aab83] underline-offset-4 hover:text-[#17231f]">Go to staff sign in</Link></p>

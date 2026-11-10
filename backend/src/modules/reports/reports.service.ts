@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../shared/prisma';
 import { forbidden, notFound } from '../../shared/http-error';
 import { persistImageDataUrls } from '../../shared/uploads';
+import { Page } from '../../shared/pagination';
 
 export const createReport = async (data: any) => {
   const shift = await prisma.shift.findUnique({
@@ -45,8 +46,9 @@ export const getReportsByShift = async (shiftId: string) => {
   });
 };
 
-export const getAllReports = async () => {
-  return await prisma.report.findMany({
+export const getAllReports = async (page: Page) => {
+  return Promise.all([prisma.report.findMany({
+    ...page,
     include: {
       user: { select: { name: true } },
       shift: {
@@ -56,11 +58,12 @@ export const getAllReports = async () => {
       },
     },
     orderBy: { createdAt: 'desc' },
-  });
+  }), prisma.report.count()]);
 };
 
-export const getReportsByUser = async (userId: string) => {
-  return await prisma.report.findMany({
+export const getReportsByUser = async (userId: string, page: Page) => {
+  return Promise.all([prisma.report.findMany({
+    ...page,
     where: { userId },
     include: {
       user: { select: { name: true } },
@@ -71,5 +74,5 @@ export const getReportsByUser = async (userId: string) => {
       },
     },
     orderBy: { createdAt: 'desc' },
-  });
+  }), prisma.report.count({ where: { userId } })]);
 };

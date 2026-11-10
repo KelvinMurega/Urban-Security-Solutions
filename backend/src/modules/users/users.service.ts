@@ -3,6 +3,7 @@ import { prisma } from '../../shared/prisma';
 import { badRequest, conflict, forbidden, notFound } from '../../shared/http-error';
 import { hashPassword, normalizeEmail } from '../../shared/password';
 import { securityLog } from '../../shared/security-log';
+import { Page } from '../../shared/pagination';
 
 // Every User read in this module must exclude secrets (password hash, tokenVersion, lockout state).
 const USER_SAFE_SELECT = {
@@ -76,16 +77,18 @@ export const createUser = async (data: CreateUserInput, actorId: string) => {
   }
 };
 
-export const getAllUsers = async () => {
-  return prisma.user.findMany({
-    where: { role: Role.GUARD },
+export const getAllUsers = async (page: Page) => {
+  const where = { role: Role.GUARD };
+  return Promise.all([prisma.user.findMany({
+    ...page,
+    where,
     select: {
       ...USER_SAFE_SELECT,
       managedSites: true,
       site: true,
     },
     orderBy: { createdAt: 'desc' },
-  });
+  }), prisma.user.count({ where })]);
 };
 
 export const getUserById = async (id: string) => {

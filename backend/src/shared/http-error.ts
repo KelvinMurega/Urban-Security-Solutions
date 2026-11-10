@@ -1,5 +1,7 @@
 import { Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { logger } from './logger';
+import { captureException } from './monitoring';
 
 // Errors whose message is safe to show to the caller. Anything else is treated as an
 // internal error and replaced with a generic message, so database/stack details never leak.
@@ -44,7 +46,8 @@ export const toHttpError = (error: unknown): HttpError => {
 export const sendError = (res: Response, error: unknown) => {
   const httpError = toHttpError(error);
   if (httpError.status >= 500) {
-    console.error('[error]', error);
+    logger.error({ err: error }, 'unhandled error');
+    captureException(error);
   }
   return res.status(httpError.status).json({ error: httpError.message });
 };

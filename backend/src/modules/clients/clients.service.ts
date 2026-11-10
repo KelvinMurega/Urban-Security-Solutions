@@ -2,6 +2,7 @@ import { Role, UserStatus } from '@prisma/client';
 import { prisma } from '../../shared/prisma';
 import { badRequest, conflict, notFound } from '../../shared/http-error';
 import { hashPassword, normalizeEmail } from '../../shared/password';
+import { Page } from '../../shared/pagination';
 
 const CLIENT_SELECT = {
   id: true,
@@ -18,11 +19,10 @@ const CLIENT_SELECT = {
   },
 };
 
-export const getClients = () => prisma.user.findMany({
-  where: { role: Role.CLIENT },
-  select: CLIENT_SELECT,
-  orderBy: { createdAt: 'desc' },
-});
+export const getClients = (page: Page) => Promise.all([
+  prisma.user.findMany({ where: { role: Role.CLIENT }, select: CLIENT_SELECT, orderBy: { createdAt: 'desc' }, ...page }),
+  prisma.user.count({ where: { role: Role.CLIENT } }),
+]);
 
 export const createClient = async (data: { name: string; email: string; password: string; phone?: string }) => {
   try {

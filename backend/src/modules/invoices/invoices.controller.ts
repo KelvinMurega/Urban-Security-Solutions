@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { sendError } from '../../shared/http-error';
+import { recordAudit } from '../../shared/audit';
+import { parsePage, sendPage } from '../../shared/pagination';
 import { InvoiceStatus, Role } from '@prisma/client';
 import { z } from 'zod';
 import * as InvoiceService from './invoices.service';
@@ -19,10 +21,11 @@ export class InvoicesController {
   static async list(req: Request, res: Response) {
     try {
       const actor = (req as any).user as { id: string; role: Role };
-      const invoices = actor.role === Role.CLIENT
-        ? await InvoiceService.getClientInvoices(actor.id)
-        : await InvoiceService.getInvoices();
-      res.json(invoices);
+      const page = parsePage(req);
+      sendPage(
+        res,
+        actor.role === Role.CLIENT ? await InvoiceService.getClientInvoices(actor.id, page) : await InvoiceService.getInvoices(page)
+      );
     } catch (error) {
       sendError(res, error);
     }
@@ -35,6 +38,12 @@ export class InvoicesController {
     try {
       const actor = (req as any).user as { id: string; role: Role };
       const invoice = await InvoiceService.createInvoice({ ...parsed.data, issuedById: actor.id });
+      await recordAudit(req, {
+        action: 'invoice.create',
+        entityType: 'invoice',
+        entityId: invoice.id,
+        metadata: { invoiceNumber: invoice.invoiceNumber, clientId: invoice.clientId, amount: invoice.amount, currency: invoice.currency },
+      });
       res.status(201).json(invoice);
     } catch (error) {
       sendError(res, error);
@@ -47,6 +56,7 @@ export class InvoicesController {
 
     try {
       const invoice = await InvoiceService.updateInvoiceStatus(String(req.params.id), parsed.data.status);
+      await recordAudit(req, { action: 'invoice.status', entityType: 'invoice', entityId: invoice.id, metadata: { status: invoice.status } });
       res.json(invoice);
     } catch (error) {
       sendError(res, error);

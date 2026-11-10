@@ -8,6 +8,7 @@ import reportRoutes from '../modules/reports/reports.routes';
 import clientRoutes from '../modules/clients/clients.routes';
 import clientPortalRoutes from '../modules/client-portal/client-portal.routes';
 import invoiceRoutes from '../modules/invoices/invoices.routes';
+import auditRoutes from '../modules/audit/audit.routes';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import { Role } from '@prisma/client';
 
@@ -25,5 +26,6 @@ router.use('/reports', requireAuth, requireRole(Role.ADMIN, Role.GUARD), reportR
 router.use('/clients', requireAuth, requireRole(Role.ADMIN), clientRoutes);
 router.use('/client', requireAuth, requireRole(Role.CLIENT), clientPortalRoutes);
 router.use('/invoices', requireAuth, requireRole(Role.ADMIN, Role.CLIENT), invoiceRoutes);
+router.use('/audit-logs', requireAuth, requireRole(Role.ADMIN), auditRoutes);
 
 export default router;

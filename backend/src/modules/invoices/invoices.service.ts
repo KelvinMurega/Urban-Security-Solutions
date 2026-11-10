@@ -2,6 +2,7 @@ import { InvoiceStatus, Role } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { prisma } from '../../shared/prisma';
 import { badRequest, notFound } from '../../shared/http-error';
+import { Page } from '../../shared/pagination';
 
 const invoiceInclude = {
   client: { select: { id: true, name: true, email: true } },
@@ -14,21 +15,21 @@ const serializeInvoice = (invoice: any) => ({
   amount: invoice.amount.toString(),
 });
 
-export const getInvoices = async () => {
-  const invoices = await prisma.invoice.findMany({
-    include: invoiceInclude,
-    orderBy: { issuedAt: 'desc' },
-  });
-  return invoices.map(serializeInvoice);
+export const getInvoices = async (page: Page): Promise<[any[], number]> => {
+  const [invoices, total] = await Promise.all([
+    prisma.invoice.findMany({ include: invoiceInclude, orderBy: { issuedAt: 'desc' }, ...page }),
+    prisma.invoice.count(),
+  ]);
+  return [invoices.map(serializeInvoice), total];
 };
 
-export const getClientInvoices = async (clientId: string) => {
-  const invoices = await prisma.invoice.findMany({
-    where: { clientId },
-    include: invoiceInclude,
-    orderBy: { issuedAt: 'desc' },
-  });
-  return invoices.map(serializeInvoice);
+export const getClientInvoices = async (clientId: string, page: Page): Promise<[any[], number]> => {
+  const where = { clientId };
+  const [invoices, total] = await Promise.all([
+    prisma.invoice.findMany({ where, include: invoiceInclude, orderBy: { issuedAt: 'desc' }, ...page }),
+    prisma.invoice.count({ where }),
+  ]);
+  return [invoices.map(serializeInvoice), total];
 };
 
 export const createInvoice = async (data: {

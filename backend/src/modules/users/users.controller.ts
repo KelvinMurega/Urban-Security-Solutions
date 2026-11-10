@@ -3,6 +3,8 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import * as UserService from './users.service';
 import { sendError } from '../../shared/http-error';
+import { recordAudit } from '../../shared/audit';
+import { parsePage, sendPage } from '../../shared/pagination';
 import { emailSchema, passwordSchema } from '../../shared/password';
 
 const guardSchema = z.object({
@@ -29,15 +31,17 @@ export class UserController {
     try {
       const parsed = guardSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
-      res.status(201).json(await UserService.createUser(parsed.data, req.user!.id));
+      const user = await UserService.createUser(parsed.data, req.user!.id);
+      await recordAudit(req, { action: 'user.create', entityType: 'user', entityId: user.id, metadata: { role: user.role } });
+      res.status(201).json(user);
     } catch (error) {
       sendError(res, error);
     }
   }
 
-  static async getAllGuards(_req: Request, res: Response) {
+  static async getAllGuards(req: Request, res: Response) {
     try {
-      res.json(await UserService.getAllUsers());
+      sendPage(res, await UserService.getAllUsers(parsePage(req)));
     } catch (error) {
       sendError(res, error);
     }
@@ -57,7 +61,15 @@ export class UserController {
     try {
       const parsed = guardUpdateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
-      res.json(await UserService.updateUser(String(req.params.id), parsed.data, req.user!));
+      const user = await UserService.updateUser(String(req.params.id), parsed.data, req.user!);
+      const { password: _password, ...changes } = parsed.data;
+      await recordAudit(req, {
+        action: 'user.update',
+        entityType: 'user',
+        entityId: user.id,
+        metadata: { ...changes, passwordReset: Boolean(parsed.data.password) },
+      });
+      res.json(user);
     } catch (error) {
       sendError(res, error);
     }
@@ -66,6 +78,7 @@ export class UserController {
   static async deactivateGuard(req: Request, res: Response) {
     try {
       await UserService.deactivateUser(String(req.params.id), req.user!.id);
+      await recordAudit(req, { action: 'user.deactivate', entityType: 'user', entityId: String(req.params.id) });
       res.status(204).send();
     } catch (error) {
       sendError(res, error);

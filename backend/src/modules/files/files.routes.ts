@@ -1,10 +1,11 @@
 import { Request, Response, Router } from 'express';
-import path from 'path';
 import { Role } from '@prisma/client';
 import { requireAuth } from '../../middleware/auth.middleware';
 import { prisma } from '../../shared/prisma';
 import { securityLog } from '../../shared/security-log';
-import { parseManagedFileName, UPLOAD_CATEGORIES, UPLOAD_ROOT, UploadCategory } from '../../shared/uploads';
+import { logger } from '../../shared/logger';
+import { storage } from '../../shared/storage';
+import { parseManagedFileName, UPLOAD_CATEGORIES, UploadCategory } from '../../shared/uploads';
 
 const router = Router();
 
@@ -65,14 +66,22 @@ router.get('/:category/:fileName', requireAuth, async (req: Request, res: Respon
       return res.status(404).json({ error: 'Not found' });
     }
 
+    const object = await storage.get(`${category}/${fileName}`);
+    if (!object) return res.status(404).json({ error: 'Not found' });
+
+    res.setHeader('Content-Type', object.contentType || 'application/octet-stream');
+    if (object.size !== undefined) res.setHeader('Content-Length', String(object.size));
     res.setHeader('Cache-Control', 'private, max-age=300');
     res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
     res.setHeader('Content-Disposition', 'inline');
-    res.sendFile(fileName, { root: path.join(UPLOAD_ROOT, category), dotfiles: 'deny' }, (error) => {
-      if (error && !res.headersSent) res.status(404).json({ error: 'Not found' });
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    object.stream.on('error', (error) => {
+      logger.error({ err: error, path: url }, 'failed to stream upload');
+      res.destroy(error);
     });
+    object.stream.pipe(res);
   } catch (error) {
-    console.error('[files] failed to serve upload', error);
+    logger.error({ err: error, path: url }, 'failed to serve upload');
     if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
   }
 });

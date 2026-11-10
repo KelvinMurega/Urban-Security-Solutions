@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 // Secure by default: anything other than an explicit development/test value runs in
 // production mode, so a forgotten NODE_ENV never silently relaxes cookies, CORS or errors.
@@ -29,8 +29,32 @@ const envSchema = z.object({
   COOKIE_DOMAIN: z.string().optional(),
   // Number of reverse proxies in front of the API (load balancer, nginx). 0 = none.
   TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
+  // Requests per 15 minutes per client IP.
+  LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).max(1000).default(10),
+  API_RATE_LIMIT: z.coerce.number().int().min(10).max(100_000).default(600),
   // The one-time /api/auth/register bootstrap endpoint is OFF unless explicitly enabled.
   ENABLE_SETUP_REGISTRATION: z.enum(['true', 'false']).default('false'),
+
+  // Observability
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  SENTRY_DSN: z.string().url().optional().or(z.literal('').transform(() => undefined)),
+  SENTRY_ENVIRONMENT: z.string().optional(),
+
+  // Evidence/avatar storage: local disk (single server) or S3-compatible object storage
+  // (AWS S3, Cloudflare R2, DigitalOcean Spaces). Objects are always private.
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  UPLOAD_DIR: z.string().default('uploads'),
+  S3_BUCKET: z.string().optional(),
+  S3_REGION: z.string().default('auto'),
+  S3_ENDPOINT: z.string().url().optional().or(z.literal('').transform(() => undefined)),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+}).superRefine((value, ctx) => {
+  if (value.STORAGE_DRIVER === 's3') {
+    for (const key of ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
+      if (!value[key]) ctx.addIssue({ code: 'custom', path: [key], message: `${key} is required when STORAGE_DRIVER=s3` });
+    }
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);

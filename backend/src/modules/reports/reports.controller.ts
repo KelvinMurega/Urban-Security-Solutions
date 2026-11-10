@@ -3,6 +3,8 @@ import * as ReportService from './reports.service';
 import { Role } from '@prisma/client';
 import { z } from 'zod';
 import { sendError } from '../../shared/http-error';
+import { recordAudit } from '../../shared/audit';
+import { parsePage, sendPage } from '../../shared/pagination';
 
 const reportCreateSchema = z.object({
   content: z.string().trim().min(1).max(191), // VARCHAR(191) column
@@ -35,6 +37,7 @@ export class ReportController {
       }
 
       const report = await ReportService.createReport(payload);
+      await recordAudit(req, { action: 'report.create', entityType: 'report', entityId: report.id, metadata: { shiftId: report.shiftId } });
       res.status(201).json(report);
     } catch (error) {
       sendError(res, error);
@@ -48,11 +51,11 @@ export class ReportController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const reports =
-        actor.role === Role.ADMIN
-          ? await ReportService.getAllReports()
-          : await ReportService.getReportsByUser(actor.id);
-      res.json(reports);
+      const page = parsePage(req);
+      sendPage(
+        res,
+        actor.role === Role.ADMIN ? await ReportService.getAllReports(page) : await ReportService.getReportsByUser(actor.id, page)
+      );
     } catch (error) {
       sendError(res, error);
     }

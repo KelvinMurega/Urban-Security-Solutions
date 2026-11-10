@@ -20,7 +20,6 @@ enum UserStatus {
 }
 
 enum IncidentSeverity {
-  
   LOW
   MEDIUM
   HIGH
@@ -47,13 +46,13 @@ enum InvoiceStatus {
 
 // 2. Hardened User Model
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
+  id        String     @id @default(uuid())
+  email     String     @unique
   password  String
   name      String
   phone     String?
-  avatarUrl String?  @db.LongText
-  role      Role     @default(GUARD) // Uses the Enum instead of String
+  avatarUrl String?    @db.LongText
+  role      Role       @default(GUARD) // Uses the Enum instead of String
   status    UserStatus @default(ACTIVE)
 
   // Session security: bumping tokenVersion revokes every token issued before it
@@ -66,88 +65,106 @@ model User {
   passwordChangedAt   DateTime?
 
   // Relations
-  managedSites Site[]    @relation("SiteManager")
-  assignedShifts Shift[]
-  incidents      Incident[]
-  reports        Report[]
-  shiftHandoverIns  Shift[] @relation("ShiftCheckInFrom")
-  shiftHandoverOuts Shift[] @relation("ShiftCheckOutTo")
-  clientSites    ClientSite[] @relation("ClientSiteAssignments")
-  clientInvoices Invoice[] @relation("InvoiceClient")
-  issuedInvoices Invoice[] @relation("InvoiceIssuer")
+  managedSites      Site[]       @relation("SiteManager")
+  assignedShifts    Shift[]
+  incidents         Incident[]
+  reports           Report[]
+  shiftHandoverIns  Shift[]      @relation("ShiftCheckInFrom")
+  shiftHandoverOuts Shift[]      @relation("ShiftCheckOutTo")
+  clientSites       ClientSite[] @relation("ClientSiteAssignments")
+  clientInvoices    Invoice[]    @relation("InvoiceClient")
+  issuedInvoices    Invoice[]    @relation("InvoiceIssuer")
+  auditLogs         AuditLog[]   @relation("AuditActor")
 
   // Assignment: Each guard can be assigned to one site
-  siteId   String?   // Foreign key to Site
-  site     Site?     @relation("UserSite", fields: [siteId], references: [id])
+  siteId String? // Foreign key to Site
+  site   Site?   @relation("UserSite", fields: [siteId], references: [id])
 
   // Audit Fields
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   isActive  Boolean  @default(true) // Professional practice: Soft deactivation
+
+  @@index([role, status])
 }
 
 model Site {
-  id          String   @id @default(uuid())
-  name        String
-  address     String
-  location    String?
-  latitude    Float?
-  longitude   Float?
-  geofenceRadiusMeters Int @default(150)
+  id                   String  @id @default(uuid())
+  name                 String
+  address              String
+  location             String?
+  latitude             Float?
+  longitude            Float?
+  geofenceRadiusMeters Int     @default(150)
 
   // Relations
-  managerId   String?
-  manager     User?    @relation("SiteManager", fields: [managerId], references: [id])
-  incidents   Incident[]
-  shifts      Shift[]
-  users       User[]   @relation("UserSite")
+  managerId         String?
+  manager           User?        @relation("SiteManager", fields: [managerId], references: [id])
+  incidents         Incident[]
+  shifts            Shift[]
+  users             User[]       @relation("UserSite")
   clientAssignments ClientSite[] @relation("SiteClientAssignments")
-  invoices    Invoice[] @relation("SiteInvoices")
+  invoices          Invoice[]    @relation("SiteInvoices")
 
   // Audit Fields
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Incident {
-  id          String           @id @default(uuid())
-  title       String
-  description String
-  severity    IncidentSeverity @default(MEDIUM)
-  status      IncidentStatus @default(OPEN)
+  id                String           @id @default(uuid())
+  title             String
+  description       String
+  severity          IncidentSeverity @default(MEDIUM)
+  status            IncidentStatus   @default(OPEN)
   resolutionDetails String?
-  reportedAt DateTime @default(now())
-  photoUrls   Json?
-  
+  reportedAt        DateTime         @default(now())
+  photoUrls         Json?
+
   // Relations
-  userId      String
-  user        User             @relation(fields: [userId], references: [id])
-  siteId      String
-  site        Site             @relation(fields: [siteId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id])
 
   // Audit Fields
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([siteId, reportedAt])
+  @@index([userId, createdAt])
+  @@index([status])
 }
 
 model Shift {
-  id          String      @id @default(uuid())
-  startTime   DateTime
-  endTime     DateTime?
-  status      ShiftStatus @default(SCHEDULED)
-  checkedInAt DateTime?
+  id           String      @id @default(uuid())
+  startTime    DateTime
+  endTime      DateTime?
+  status       ShiftStatus @default(SCHEDULED)
+  checkedInAt  DateTime?
   checkedOutAt DateTime?
-  checkInLat  Float?
-  checkInLng  Float?
-  checkOutLat Float?
-  checkOutLng Float?
+  checkInLat   Float?
+  checkInLng   Float?
+  checkOutLat  Float?
+  checkOutLng  Float?
+
+  // GPS evidence: phones can fake location, so we keep what the device reported and flag
+  // anomalies for supervisors instead of trusting coordinates blindly.
+  checkInAccuracyMeters  Float?
+  checkOutAccuracyMeters Float?
+  checkInIp              String? @db.VarChar(45)
+  checkOutIp             String? @db.VarChar(45)
+  checkInUserAgent       String? @db.VarChar(255)
+  checkOutUserAgent      String? @db.VarChar(255)
+  locationFlagged        Boolean @default(false)
+  locationFlagReason     String? @db.VarChar(255)
 
   // Relations
-  userId      String
-  user        User        @relation(fields: [userId], references: [id])
-  siteId      String
-  site        Site        @relation(fields: [siteId], references: [id])
-  reports     Report[]
+  userId  String
+  user    User     @relation(fields: [userId], references: [id])
+  siteId  String
+  site    Site     @relation(fields: [siteId], references: [id])
+  reports Report[]
 
   checkInFromUserId String?
   checkInFromUser   User?   @relation("ShiftCheckInFrom", fields: [checkInFromUserId], references: [id])
@@ -155,8 +172,12 @@ model Shift {
   checkOutToUser    User?   @relation("ShiftCheckOutTo", fields: [checkOutToUserId], references: [id])
 
   // Audit Fields
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, startTime])
+  @@index([siteId, startTime])
+  @@index([status])
 }
 
 model ClientSite {
@@ -196,17 +217,38 @@ model Invoice {
 }
 
 model Report {
-  id          String   @id @default(uuid())
-  content     String
-  photoUrls   Json?
+  id        String @id @default(uuid())
+  content   String
+  photoUrls Json?
 
   // Relations
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  shiftId     String
-  shift       Shift    @relation(fields: [shiftId], references: [id])
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+  shiftId String
+  shift   Shift  @relation(fields: [shiftId], references: [id])
 
   // Audit Fields
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([shiftId, createdAt])
+}
+
+// Append-only record of who changed what. Required for client disputes and incident
+// investigations; never updated or deleted by the application.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action     String   @db.VarChar(64)
+  entityType String   @db.VarChar(32)
+  entityId   String?  @db.VarChar(64)
+  metadata   Json?
+  ip         String?  @db.VarChar(45)
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
 }

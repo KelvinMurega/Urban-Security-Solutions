@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import * as SiteService from './site.service';
 import { z } from 'zod';
 import { sendError } from '../../shared/http-error';
+import { recordAudit } from '../../shared/audit';
+import { parsePage, sendPage } from '../../shared/pagination';
 
 const addGuardSchema = z.object({
   guardId: z.string().min(1).max(64).optional(),
@@ -37,6 +39,7 @@ export class SiteController {
         return res.status(400).json({ error: parsed.error.issues });
       }
       const site = await SiteService.createSite(parsed.data);
+      await recordAudit(req, { action: 'site.create', entityType: 'site', entityId: site.id, metadata: parsed.data });
       res.status(201).json(site);
     } catch (error) {
       sendError(res, error);
@@ -45,8 +48,7 @@ export class SiteController {
 
   static async getAll(req: Request, res: Response) {
     try {
-      const sites = await SiteService.getAllSites();
-      res.json(sites);
+      sendPage(res, await SiteService.getAllSites(parsePage(req)));
     } catch (error) {
       sendError(res, error);
     }
@@ -69,6 +71,7 @@ export class SiteController {
       const parsed = addGuardSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
       const guard = await SiteService.addGuardToSite(req.params.id as string, parsed.data);
+      await recordAudit(req, { action: 'site.assign_guard', entityType: 'site', entityId: String(req.params.id), metadata: { guardId: guard.id } });
       res.status(201).json(guard);
     } catch (error) {
       sendError(res, error);
@@ -83,6 +86,7 @@ export class SiteController {
         return res.status(400).json({ error: parsed.error.issues });
       }
       const site = await SiteService.updateSite(req.params.id as string, parsed.data);
+      await recordAudit(req, { action: 'site.update', entityType: 'site', entityId: site.id, metadata: parsed.data });
       res.json(site);
     } catch (error) {
       sendError(res, error);

@@ -76,7 +76,7 @@ export default function SiteDetailPage({ params }: { params: Promise<{ id: strin
     fetchData();
   }, [id]);
 
-  const fetchData = async () => {
+  async function fetchData() {
     try {
       const [siteRes, guardsRes] = await Promise.all([
         axios.get(`${apiUrl}/api/sites/${id}`),

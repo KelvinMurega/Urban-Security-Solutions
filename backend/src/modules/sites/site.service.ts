@@ -1,6 +1,7 @@
 import { Role, UserStatus } from '@prisma/client';
 import { prisma } from '../../shared/prisma';
 import { badRequest, notFound } from '../../shared/http-error';
+import { Page } from '../../shared/pagination';
 
 const assertManager = async (managerId?: string) => {
   if (!managerId) return;
@@ -28,8 +29,9 @@ export const createSite = async (data: any) => {
   });
 };
 
-export const getAllSites = async () => {
-  return await prisma.site.findMany({
+export const getAllSites = async (page: Page) => {
+  return Promise.all([prisma.site.findMany({
+    ...page,
     include: {
       manager: {
         select: { id: true, name: true, email: true }
@@ -41,7 +43,7 @@ export const getAllSites = async () => {
       }
     },
     orderBy: { createdAt: 'desc' }
-  });
+  }), prisma.site.count()]);
 };
 
 const USER_PUBLIC_SELECT = {

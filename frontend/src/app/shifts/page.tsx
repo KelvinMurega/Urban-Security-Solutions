@@ -33,7 +33,7 @@ export default function ShiftsPage() {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  async function fetchData() {
     try {
       const [shiftRes, guardRes, siteRes] = await Promise.all([
         axios.get(`${apiUrl}/api/shifts`),
@@ -176,6 +176,11 @@ export default function ShiftsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge label={shift.status} tone={getStatusColor(shift.status)} />
+                      {shift.locationFlagged && (
+                        <div className="mt-1" title={shift.locationFlagReason || 'Location needs review'}>
+                          <StatusBadge label="GPS review" tone="warning" />
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -68,7 +68,7 @@ export default function IncidentsPage() {
     setPrintDate(new Date().toLocaleDateString());
   }, []);
 
-  const fetchData = async () => {
+  async function fetchData() {
     try {
       const [incRes, guardRes, siteRes] = await Promise.all([
         axios.get(`${apiUrl}/api/incidents`),

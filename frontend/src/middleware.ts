@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const PUBLIC_PATHS = new Set(['/', '/login', '/client/login']);
+const PUBLIC_PATHS = new Set(['/', '/login', '/client/login', '/privacy']);
 const GUARD_PREFIX = '/guard';
 const CLIENT_PREFIX = '/client';
 
@@ -61,5 +61,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  // /api and /uploads are proxied to the backend, which enforces its own authentication.
+  matcher: ['/((?!api/|uploads/|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
 };

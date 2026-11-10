@@ -35,3 +35,9 @@ backend/uploads/
 
 # Backend build output
 backend/dist/
+
+# Legacy static prototype (separate git repository)
+urban-security-solutions/
+
+# Coverage / test output
+coverage/

@@ -2,9 +2,18 @@ import type { NextConfig } from "next";
 
 const isProduction = process.env.NODE_ENV === "production";
 
+// Two deployment modes:
+//  1. Same-origin proxy (recommended): set API_PROXY_TARGET (e.g. http://backend:5000) and
+//     NEXT_PUBLIC_API_URL=same-origin at BUILD time. The browser only ever talks to the
+//     frontend's domain, so the session cookie, CSP and CORS are trivially correct.
+//  2. Separate API domain: set NEXT_PUBLIC_API_URL=https://api.example.com (same parent
+//     domain as the app, with COOKIE_DOMAIN set on the API).
+const proxyTarget = process.env.API_PROXY_TARGET?.replace(/\/+$/, "");
+
 const apiOrigin = (() => {
   try {
-    return process.env.NEXT_PUBLIC_API_URL ? new URL(process.env.NEXT_PUBLIC_API_URL).origin : "";
+    const value = process.env.NEXT_PUBLIC_API_URL;
+    return value && value !== "same-origin" ? new URL(value).origin : "";
   } catch {
     return "";
   }
@@ -43,12 +52,20 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "standalone", // minimal self-contained server for the Docker image
   poweredByHeader: false,
   turbopack: {
     root: __dirname,
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
+  },
+  async rewrites() {
+    if (!proxyTarget) return [];
+    return [
+      { source: "/api/:path*", destination: `${proxyTarget}/api/:path*` },
+      { source: "/uploads/:path*", destination: `${proxyTarget}/uploads/:path*` },
+    ];
   },
 };
 

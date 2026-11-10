@@ -31,7 +31,7 @@ const getCurrentPosition = (): Promise<GeolocationPosition> => {
     }
     navigator.geolocation.getCurrentPosition(resolve, () => {
       reject(new Error('Could not get your location. Enable location access and try again.'));
-    }, { enableHighAccuracy: true, timeout: 15000 });
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
   });
 };
 
@@ -112,6 +112,7 @@ export default function GuardSchedulePage() {
       const res = await axios.put(`${apiUrl}/api/shifts/${shiftId}/check-in`, {
         lat: position.coords.latitude,
         lng: position.coords.longitude,
+        accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : undefined,
         previousGuardId: checkInSelection[shiftId] || undefined
       });
       const distance = res.data?.checkInDistanceMeters;
@@ -136,6 +137,7 @@ export default function GuardSchedulePage() {
       const res = await axios.put(`${apiUrl}/api/shifts/${shiftId}/check-out`, {
         lat: position.coords.latitude,
         lng: position.coords.longitude,
+        accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : undefined,
         nextGuardId: checkOutSelection[shiftId] || undefined
       });
       const distance = res.data?.checkOutDistanceMeters;

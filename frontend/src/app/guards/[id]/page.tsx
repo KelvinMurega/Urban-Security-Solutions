@@ -31,7 +31,7 @@ export default function GuardProfile({ params }: { params: Promise<{ id: string 
     fetchData();
   }, [id]);
 
-  const fetchData = async () => {
+  async function fetchData() {
     try {
       const [guardRes, sitesRes] = await Promise.all([
         axios.get(`${apiUrl}/api/users/guards/${id}`),

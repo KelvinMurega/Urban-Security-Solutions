@@ -3,6 +3,8 @@ import * as IncidentService from './incidents.service';
 import { Role, IncidentSeverity, IncidentStatus } from '@prisma/client';
 import { z } from 'zod';
 import { sendError } from '../../shared/http-error';
+import { recordAudit } from '../../shared/audit';
+import { parsePage, sendPage } from '../../shared/pagination';
 
 const incidentCreateSchema = z.object({
   // VARCHAR(191) columns: reject cleanly instead of failing in the database.
@@ -44,6 +46,12 @@ export class IncidentController {
       }
 
       const incident = await IncidentService.createIncident(payload, actor);
+      await recordAudit(req, {
+        action: 'incident.create',
+        entityType: 'incident',
+        entityId: incident.id,
+        metadata: { siteId: incident.siteId, severity: incident.severity, reporterId: incident.userId },
+      });
       res.status(201).json(incident);
     } catch (error) {
       sendError(res, error);
@@ -58,11 +66,13 @@ export class IncidentController {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const incidents =
+      const page = parsePage(req);
+      sendPage(
+        res,
         actor.role === Role.ADMIN
-          ? await IncidentService.getAllIncidents()
-          : await IncidentService.getIncidentsByUser(actor.id);
-      res.json(incidents);
+          ? await IncidentService.getAllIncidents(page)
+          : await IncidentService.getIncidentsByUser(actor.id, page)
+      );
     } catch (error) {
       sendError(res, error);
     }
@@ -85,6 +95,12 @@ export class IncidentController {
       }
 
       const incident = await IncidentService.updateIncident(req.params.id as string, parsed.data);
+      await recordAudit(req, {
+        action: 'incident.update',
+        entityType: 'incident',
+        entityId: incident.id,
+        metadata: { status: incident.status },
+      });
       res.json(incident);
     } catch (error) {
       sendError(res, error);

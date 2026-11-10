@@ -5,6 +5,7 @@ import { env } from '../../config/env';
 import { AUTH_COOKIE_NAME } from '../../middleware/auth.middleware';
 import { AuthService } from './auth.service';
 import { sendError } from '../../shared/http-error';
+import { recordAudit } from '../../shared/audit';
 import { emailSchema, passwordSchema } from '../../shared/password';
 
 const loginSchema = z.object({
@@ -59,6 +60,7 @@ export class AuthController {
 
       const { tokenVersion, ...user } = result.user;
       res.cookie(AUTH_COOKIE_NAME, AuthService.generateToken({ id: user.id, role: user.role, tokenVersion }), authCookieOptions());
+      await recordAudit(req, { action: 'auth.login', entityType: 'auth', entityId: user.id, actorId: user.id });
       // The token is deliberately NOT returned in the body: it lives only in the httpOnly cookie.
       res.json({ user });
     } catch (error) {
@@ -108,6 +110,7 @@ export class AuthController {
 
       // Password change revoked all sessions; re-issue a fresh cookie for this one.
       if (passwordChanged) {
+        await recordAudit(req, { action: 'auth.password_change', entityType: 'auth', entityId: profile.id });
         res.cookie(
           AUTH_COOKIE_NAME,
           AuthService.generateToken({ id: profile.id, role: profile.role, tokenVersion }),

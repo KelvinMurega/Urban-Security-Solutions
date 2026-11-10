@@ -14,6 +14,7 @@ import {
   ClipboardList,
   UsersRound,
   ReceiptText,
+  ScrollText,
   Menu,
   X,
   ChevronLeft,
@@ -133,6 +134,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Daily Logs', href: '/reports', icon: ClipboardList },
     { name: 'Clients', href: '/clients', icon: UsersRound },
     { name: 'Invoices', href: '/invoices', icon: ReceiptText },
+    { name: 'Audit Log', href: '/audit', icon: ScrollText },
   ];
 
   const navLinks = navItems.map((item) => (

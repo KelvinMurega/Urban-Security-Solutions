@@ -1,0 +1,33 @@
+# Automatic HTTPS (Let's Encrypt) in front of the stack.
+# DNS for $APP_DOMAIN must point at this server, and ports 80/443 must be open.
+#
+# /api and /uploads go straight to the API (not through the web app), so the API sees one
+# trusted proxy (Caddy) that sets X-Forwarded-For from the real TCP peer. Caddy ignores
+# client-supplied forwarding headers by default, so the client IP cannot be spoofed.
+# => use TRUST_PROXY=1 with this file.
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# Photo uploads are base64 JSON (4 x 2MB); keep a ceiling slightly above the API limit.
+	request_body {
+		max_size 13MB
+	}
+
+	@api path /api/* /uploads/*
+	handle @api {
+		reverse_proxy backend:5000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	header {
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
